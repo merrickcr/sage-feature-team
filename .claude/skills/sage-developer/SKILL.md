@@ -97,41 +97,53 @@ Following the Developer role file (already rendered in Step 2):
 
 1. **Read project instructions** for code conventions, file structure, idioms.
 2. **Read the spec** for feature-level context (overview, edge cases, tech notes) and **read `target_story`'s `acceptance_criteria:`** — that's the per-story contract.
-3. **Implement the code** to satisfy the AC and make `target_story`'s tests pass. Do NOT break tests for stories already at `DONE`.
+3. **Implement the code** to satisfy **every AC** in `target_story` (not just the AC the tests cover) AND make `target_story`'s tests pass. Do NOT break tests for stories already at `DONE`. UI / device-only / manual-only AC still require production-code wiring (composables called from a route, buttons connected, etc.) — code that compiles in isolation does NOT satisfy an AC.
 4. **Do NOT run tests yourself** — that's `/sage-tester`'s job. Reason carefully about whether your changes will pass.
 5. **Test handling:** you MAY fix test bugs (wrong assertions, broken setup, mismatch with AC). You MUST NOT weaken assertions, remove cases, suppress errors, or loosen validation.
-6. **Flip `target_story` to `TESTING`** via the helper script once you believe the implementation is complete:
+6. **Write the AC implementation map sidecar** at `<stories_dir>/STORY-N.implementation.md`. Format and rules are in the Developer role file (already rendered in Step 2) under "AC Implementation Map". One `## ACx` heading per AC; under each, list at least one production file path. **The words "deferred", "future", "later", "next pass", "TODO", "to be implemented", "punted", "placeholder", "pending", "not implemented", "not yet", and "postponed" are forbidden** — they cause the verifier to reject the story.
+7. **Verify the sidecar locally**:
+   ```bash
+   python .sage/_tools/verify_ac_map.py STORY-N --stories-dir <stories_dir>
+   ```
+   (Use `_tools/verify_ac_map.py` if running from the sage-feature-team source itself.)
+   If `success: false`, fix the gaps it reports (actually wire the missing AC, or escalate if an AC truly belongs in another story) BEFORE flipping to TESTING.
+8. **Flip `target_story` to `TESTING`** via the helper script — only after the AC map verifies clean:
    ```bash
    python .sage/_tools/update_story_status.py STORY-N TESTING --stories-dir <stories_dir>
    ```
-   (Use `_tools/update_story_status.py` if running from the sage-feature-team source itself.)
    Check the JSON return; on `success: false`, stop and report.
-7. **Report to the user** as plain text:
+9. **Report to the user** as plain text:
    ```
    Story: <target_story> → TESTING
-   AC implemented: AC1, AC2, ...
+   AC implemented:
+     - AC1: <file:line>, <file:line>
+     - AC2: <file:line>
+     - AC3: <file:line>
    Files changed:
      - <path1>
      - <path2>
    Tests targeted:
      - <test_name1>
      - <test_name2>
+   AC map sidecar: <stories_dir>/STORY-N.implementation.md (verified ✓)
    Summary: <one-paragraph description of what you implemented and any decisions/trade-offs>
    ```
 
-If you encounter a blocker (ambiguous requirement, missing dependency, contradiction between AC and tests), stop and ask the user — do NOT make assumptions.
+If you encounter a blocker (ambiguous requirement, missing dependency, contradiction between AC and tests, AC genuinely belongs in a different story), stop and ask the user — do NOT make assumptions and do NOT silently push the AC forward.
 
 ---
 
 ## Key Rules (from Developer role)
 
-- Each story's `acceptance_criteria:` (in its YAML) defines what to build. Tests verify a subset. Implement every AC for the story, including ones tests don't cover.
+- AC are the contract. Tests verify a subset. Implement every AC, including ones tests don't cover. Code that compiles in isolation is NOT implemented; AC require call sites in production code.
+- Write the AC implementation map sidecar (`STORY-N.implementation.md`) before flipping to TESTING. Run `verify_ac_map.py` to confirm.
+- "deferred" / "future" / "later" / "next pass" / "TODO" / "punted" / "placeholder" / "pending" / "not implemented" / "not yet" / "postponed" are FORBIDDEN in the sidecar — they cause the verifier (and downstream `/sage-tester`) to reject the story.
 - Don't break passing tests
 - No scope creep beyond what the story asks for — don't refactor unrelated code
 - Follow project conventions (consult instruction files)
 - Always use `update_story_status.py` for status flips — never hand-edit story YAMLs
 - NO test execution
-- Flip `IN_DEV → TESTING` only when you believe the implementation satisfies the AC; never flip directly to `DONE`
+- Flip `IN_DEV → TESTING` only when (a) you believe the implementation satisfies every AC AND (b) `verify_ac_map.py` returns success; never flip directly to `DONE`
 - Don't touch stories you didn't work on
 
 ---

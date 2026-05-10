@@ -52,21 +52,36 @@ Following the base workflow, the Tester-specific steps are:
 9. **Track results** — Parse output per project instructions, silent mode
 10. **Monitor completion** — **Check every 30 seconds if tests are done** (via ScheduleWakeup)
 11. **Execute post-test cleanup** (per project instructions, if any)
-12. **Update each target story's YAML via the helper script** based on per-story test outcomes (NEVER edit YAMLs directly):
-    - For each story you ran tests for that is currently `status: TESTING`:
-      - All of its tagged tests passed → flip to `DONE`:
-        ```bash
-        python .sage/_tools/update_story_status.py STORY-N DONE \
-            --stories-dir _output/FEATURE_STORIES_{name}
-        ```
-      - Any of its tagged tests failed → flip back to `IN_DEV`:
-        ```bash
-        python .sage/_tools/update_story_status.py STORY-N IN_DEV \
-            --stories-dir _output/FEATURE_STORIES_{name}
-        ```
-    - In `story STORY-N` scope: only flip `STORY-N`. Other stories at `TESTING` weren't actually exercised by this run — leave them alone.
+12. **For each story you actually exercised that is currently `status: TESTING`, decide DONE vs IN_DEV via TWO gates** (NEVER edit YAMLs directly):
+
+    **Gate A: All tagged tests passed?** (Necessary)
+    - Any failure → flip back to `IN_DEV`:
+      ```bash
+      python .sage/_tools/update_story_status.py STORY-N IN_DEV \
+          --stories-dir _output/FEATURE_STORIES_{name}
+      ```
+    - All passed → proceed to Gate B.
+
+    **Gate B: AC implementation map sidecar verified?** (Also necessary — green tests alone don't satisfy AC)
+    ```bash
+    python .sage/_tools/verify_ac_map.py STORY-N \
+        --stories-dir _output/FEATURE_STORIES_{name}
+    ```
+    - Returns `success: true` → flip to `DONE`:
+      ```bash
+      python .sage/_tools/update_story_status.py STORY-N DONE \
+          --stories-dir _output/FEATURE_STORIES_{name}
+      ```
+    - Returns `success: false` → flip back to `IN_DEV` with the verifier's reason:
+      ```bash
+      python .sage/_tools/update_story_status.py STORY-N IN_DEV \
+          --stories-dir _output/FEATURE_STORIES_{name}
+      ```
+      Capture the verifier's JSON output (missing AC, banned-word hits, AC with no impl path) verbatim — you MUST include it in your completion message so the Developer knows exactly what to fix on the next cycle.
+
+    - In `story STORY-N` scope: only run gates for `STORY-N`. Other stories at `TESTING` weren't exercised — leave them alone.
     - Never flip a story to `DONE` if any test mapped to it failed, even if the rest of the suite is green.
-    - Check the JSON return value from each helper call; if `success: false`, escalate.
+    - Check the JSON return value from each helper call; if `update_story_status.py` returns `success: false`, escalate.
 13. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
     - Completion message MUST include: failure details, test count results, elapsed time, AND per-story outcomes
 
@@ -123,12 +138,13 @@ ScheduleWakeup(
 
 **STORY STATUS:**
 - [GO] Read all story YAMLs before reporting; map each test → story via story ID tags
-- [GO] Flip a story to `DONE` only when every test tagged for that story passed
-- [GO] Flip a story back to `IN_DEV` if any of its tagged tests failed
+- [GO] Flip a story to `DONE` ONLY when **both** gates pass: (a) every test tagged for that story passed, AND (b) `verify_ac_map.py` returns `success: true` for that story
+- [GO] Flip a story back to `IN_DEV` if Gate A fails (test failure) OR Gate B fails (missing/incomplete AC implementation map sidecar)
 - [GO] Leave story YAMLs outside the run's actual scope untouched
 - [GO] Always flip via `update_story_status.py` — it preserves the YAML structure and is locked against concurrent writes
 - [STOP] NEVER hand-edit story YAMLs
 - [STOP] NEVER flip a story directly to `DONE` if any of its mapped tests failed
+- [STOP] NEVER flip a story to `DONE` if `verify_ac_map.py` returns failure — green tests do NOT satisfy AC by themselves
 - [STOP] NEVER mark a story `DONE` based on overall suite green-ness — check per-story tests
 - [STOP] In `story STORY-N` scope, NEVER flip stories other than `STORY-N` — they weren't actually exercised
 
@@ -160,7 +176,9 @@ Results: All {total_tests} tests passed in {elapsed_time} seconds.
 
 {json.dumps({"test_results": {"passed": total_tests, "failed": 0, "failures": []}})}
 
-Stories advanced to DONE: <STORY-1, STORY-3, ...>
+Stories advanced to DONE: <STORY-1, STORY-3, ...>     # passed BOTH gates (tests + AC map)
+Stories sent back to IN_DEV (AC map gate failed): <STORY-IDs or "none">
+  For each: paste the verify_ac_map.py JSON verbatim so Developer knows exactly what to fix
 Stories still at TESTING (not in this run's target set): <STORY-N or "none">
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
@@ -180,8 +198,10 @@ Results: {passed_count} passed, {failed_count} failed in {elapsed_time} seconds.
 
 {json.dumps({"test_results": {"passed": passed_count, "failed": failed_count, "failures": failures}})}
 
-Stories advanced to DONE (all their tests passed): <STORY-IDs or "none">
-Stories sent back to IN_DEV (had failing tests): <STORY-IDs>
+Stories advanced to DONE (passed BOTH gates: tests + AC map): <STORY-IDs or "none">
+Stories sent back to IN_DEV (had failing tests): <STORY-IDs or "none">
+Stories sent back to IN_DEV (AC map gate failed despite passing tests): <STORY-IDs or "none">
+  For each: paste the verify_ac_map.py JSON verbatim so Developer knows exactly what to fix
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```

@@ -215,7 +215,8 @@ SendMessage:
 - `Stories dir: <stories_dir>`
 - `Spec file: <spec_file>`
 - `Progress file: <progress_file>`
-- If `cycle_n > 1`: paste the previous Tester run's `TEST_FAILURE` lines for this story verbatim
+- If `cycle_n > 1`: paste the previous Tester run's `TEST_FAILURE` lines for this story verbatim. If the previous Tester reported the story came back to `IN_DEV` because the **AC implementation map gate failed** (Gate B), paste the `verify_ac_map.py` JSON verbatim too — those are the gaps the Developer must close this cycle.
+- Reminder: `Required artifact: <stories_dir>/STORY-<N>.implementation.md (run verify_ac_map.py before claiming COMPLETE).`
 - `Reference: HANDBOOK.md`
 
 #### Tester worker (for a TESTING story — story-scoped)
@@ -240,10 +241,10 @@ For each completion (handshake `[ACK]+DATA` from a worker):
 1. **Run the standard handshake** (Step 8 / `HANDBOOK.md`): reply `[SYN-ACK]`, accept `[ACK]+DATA`, send a routing message that acts as the implicit final ACK. The routing message can simply be: `@<worker>: Acknowledged. You are released — shutting down.`
 2. **Re-read the completed story's YAML** to learn its new status (the worker already flipped it via `update_story_status.py`).
 3. **Update bookkeeping:**
-   - If the worker was Tester and the story is now `IN_DEV` (tests failed): `cycle_count[STORY-N] += 1`. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and report a per-story escalation (Step 6f).
-   - If the worker was Tester and the story is now `DONE`: nothing more to do for this story.
-   - If the worker was TestCreator and the story is now `IN_DEV`: ready for Developer next scan.
-   - If the worker was Developer and the story is now `TESTING`: ready for Tester next scan.
+   - If the worker was Tester and the story is now `IN_DEV`: `cycle_count[STORY-N] += 1`. The Tester's completion message tells you *why* it sent the story back — either Gate A (test failure) or Gate B (AC implementation map gate). **You don't need to re-verify the AC map yourself — Tester is the gatekeeper for DONE, and trust its verdict.** Carry the failure details forward (test failures and/or `verify_ac_map.py` JSON) into the next Developer task message for this story so the Developer can fix the right thing. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and report a per-story escalation (Step 6f).
+   - If the worker was Tester and the story is now `DONE`: both gates passed. Nothing more to do for this story.
+   - If the worker was TestCreator and the story is now `IN_DEV`: ready for Developer next scan. (TestCreator may also have written stub tests for AC its seam can't cover — those force the Developer to wire production code that the stubs target. The AC-map gate then catches whether wiring actually happened.)
+   - If the worker was Developer and the story is now `TESTING`: ready for Tester next scan. (Developer will not have flipped the story without first running `verify_ac_map.py` and getting success — the Tester re-runs the same check anyway as Gate B.)
 4. **Shut down the worker** to free the slot:
    ```python
    TaskStop(name=worker_name)
@@ -380,6 +381,7 @@ Full protocol: `HANDBOOK.md` → "Message Delivery Handshake Protocol".
 - Track per-story cycle counts independently — one stuck story doesn't drain the budget for others
 - Forward ProductOwner's questions / approval requests to the User — never answer or approve on their behalf
 - Always invoke status flips through `_tools/update_story_status.py`; never edit story YAMLs directly
+- Trust the Tester's two-gate verdict for DONE — it runs **Gate A** (per-story tests pass) AND **Gate B** (`verify_ac_map.py` passes for the AC implementation map sidecar the Developer wrote at `STORY-N.implementation.md`). Don't override either gate. When a story comes back to `IN_DEV` because Gate B failed, forward the verifier's JSON to the Developer in the next cycle's task message.
 
 **DON'T:**
 - Don't spawn an Orchestrator agent — you ARE the orchestrator
@@ -397,4 +399,5 @@ Full protocol: `HANDBOOK.md` → "Message Delivery Handshake Protocol".
 - `references/ROUTING_REFERENCE.md` — Routing decision tree
 - `sage-config.SCHEMA.md` — Config field reference (including `max_parallel_workers`, `global_timeout_seconds`)
 - `_tools/update_story_status.py` — Atomic, locked story-status updater used by all workers
+- `_tools/verify_ac_map.py` — Verifies a story's AC implementation map sidecar (Developer's mandatory artifact); Tester calls this as Gate B before flipping to DONE
 - `examples/chatbot/.sage/` — Reference per-agent instruction configs

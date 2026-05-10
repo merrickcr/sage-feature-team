@@ -102,17 +102,32 @@ Following the Tester role file (already rendered in Step 2):
 4. **Wait for completion** — for short runs, just wait for the command to finish. For long-running suites, use the `Monitor` tool to stream output and check periodically.
 5. **Execute post-test cleanup** if specified.
 6. **Parse results** per the project's parsing patterns. Map each test → story via the tagging convention.
-7. **Update story YAMLs via the helper script** for each story you actually exercised:
-   - All of its tagged tests passed AND it was at `TESTING` → flip to `DONE`:
-     ```bash
-     python .sage/_tools/update_story_status.py STORY-N DONE --stories-dir <stories_dir>
-     ```
-   - Any of its tagged tests failed AND it was at `TESTING` → flip back to `IN_DEV`:
+7. **For each story you actually exercised that was at `TESTING`, run TWO gates** before deciding DONE vs IN_DEV (NEVER edit YAMLs directly):
+
+   **Gate A: All tagged tests passed?** (Necessary)
+   - Any failure → flip back to `IN_DEV`:
      ```bash
      python .sage/_tools/update_story_status.py STORY-N IN_DEV --stories-dir <stories_dir>
      ```
-   - In `scope == "story"` mode, only flip `target_story` (other `TESTING` stories weren't run).
-   - Check each helper return; on `success: false`, surface and continue with the rest.
+   - All passed → proceed to Gate B.
+
+   **Gate B: AC implementation map sidecar verified?** (Also necessary)
+   ```bash
+   python .sage/_tools/verify_ac_map.py STORY-N --stories-dir <stories_dir>
+   ```
+   (Use `_tools/verify_ac_map.py` if running from the sage-feature-team source itself.)
+   - Returns `success: true` → flip to `DONE`:
+     ```bash
+     python .sage/_tools/update_story_status.py STORY-N DONE --stories-dir <stories_dir>
+     ```
+   - Returns `success: false` → flip back to `IN_DEV` (the Developer must fix the sidecar — missing AC, banned words, or no impl path):
+     ```bash
+     python .sage/_tools/update_story_status.py STORY-N IN_DEV --stories-dir <stories_dir>
+     ```
+     Capture the verifier's JSON output verbatim for the user report — it tells the Developer exactly what's missing.
+
+   - In `scope == "story"` mode, only run gates for `target_story` (other `TESTING` stories weren't run).
+   - Check each `update_story_status.py` return; on `success: false`, surface and continue.
 8. **Report to the user** as plain text:
    ```
    Scope: <story | full regression>
@@ -120,12 +135,16 @@ Following the Tester role file (already rendered in Step 2):
    Results: <passed>/<total> passed in <elapsed>s
 
    Story status changes:
-     - STORY-X: TESTING → DONE
-     - STORY-Y: TESTING → IN_DEV   (failures: <test_names>)
+     - STORY-X: TESTING → DONE         (Gate A: tests ✓  Gate B: AC map ✓)
+     - STORY-Y: TESTING → IN_DEV       (Gate A failed — failures: <test_names>)
+     - STORY-Z: TESTING → IN_DEV       (Gate A passed but Gate B failed — see verifier output below)
 
-   Failures:
+   Test failures:
      - <test_name>: <one-line summary of why it failed>
      ...
+
+   AC map failures (per story sent back for AC-map gap):
+     - STORY-Z: <verifier JSON verbatim — missing_ac, banned_word_hits, no_path_ac>
    ```
 
 If a test hangs (no output for 30s+), kill the process and report it as a hang — don't leave the user waiting.
@@ -137,7 +156,8 @@ If a test hangs (no output for 30s+), kill the process and report it as a hang �
 - Read project instructions BEFORE inventing test commands or parsing patterns
 - Don't modify test code, source code, or analyze failures (that's Developer's job — re-run with `/sage-developer` after)
 - Always use `update_story_status.py` for status flips — never hand-edit story YAMLs
-- Never flip a story to `DONE` if any of its tests failed, even if the rest of the suite is green
+- A story reaches `DONE` only when **both** gates pass: (a) every tagged test passed, AND (b) `verify_ac_map.py` returns success
+- If Gate B fails, the story goes back to `IN_DEV` even if all tests passed — green tests do NOT satisfy AC by themselves
 - Leave stories outside the run's actual scope untouched
 - Detect hangs (30s+ no output) and stop
 

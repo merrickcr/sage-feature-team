@@ -52,8 +52,26 @@ Following the base workflow from _BASE.md:
    python .sage/_tools/update_story_status.py STORY-N IN_DEV \
        --stories-dir _output/FEATURE_STORIES_{name}
    ```
-9. **Update progress file** — Mark Tests: DONE, list test function names AND story IDs covered
+9. **Update progress file** — Mark Tests: DONE, list test function names AND story IDs covered, AND list any stub-test files written (see "Tests You Cannot Write at Your Seam" below)
 10. **Complete the 3-way handshake** (see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+
+---
+
+## Tests You Cannot Write at Your Seam
+
+Some AC genuinely cannot be tested at the seam this project gave you (examples: a Compose UI AC when the project's `.sage/sage-test-creator-config.yaml` only allows JVM unit tests; a manual-QA AC; an AC that requires a physical device). When that happens, you have **two obligations**, NOT one:
+
+**1. Write a stub test file at the appropriate location**, even if it can't run in this seam.
+   - The file goes where the project's instructions say tests for that surface live (e.g., `app/src/androidTest/java/...` for Android Compose, `tests/manual/` for manual-QA AC).
+   - Each stub test is annotated/marked so it does NOT run in the default suite (e.g., `@Ignore("device-required: AC2 — bottom-sheet rendering")` for JUnit, `@pytest.mark.skip(reason="...")` for pytest, `test.skip(...)` for Jest, etc.). Use whatever the project convention is — escalate if unclear.
+   - The file's existence forces the Developer to wire production code that the stub *targets* — composable name, route key, button id, etc. — even though the test won't execute. This is the whole point.
+   - Tag the stub by the same story ID convention as runnable tests, so Tester can see it exists.
+
+**2. Note the stub in the progress file and your completion message.** Do NOT use the words "deferred," "future," "later," "next pass," or similar — they trigger the verifier and (correctly) suggest you're rolling forward instead of doing the work. Say what you actually did: *"Wrote stub androidTest at <path> for AC2 (device-required) — runnable in CI when emulator available; will gate Developer's wiring."*
+
+**You may NOT** simply omit the test and write "deferred to STORY-N" in the completion notes. That pattern is the exact failure mode this gate exists to prevent.
+
+If an AC really doesn't belong in this story (the spec was wrong), escalate to the User to fix the spec — don't silently push it to a future story.
 
 ---
 
@@ -97,8 +115,9 @@ choose, depending on framework idioms:
 - [RULE] Update progress file BEFORE reporting
 - [STOP] NO test execution
 - [STOP] NO code implementation
-- [STOP] NEVER set a story to `IN_DEV` without an actual test for it
+- [STOP] NEVER set a story to `IN_DEV` without at least one test (runnable OR stub) for every AC in that story
 - [STOP] NEVER touch stories outside your target set
+- [STOP] NEVER use "deferred" / "future" / "later" / "next pass" / "next cycle" / "TODO" / "to be implemented" in completion artifacts. If an AC can't be tested at your seam, write a stub test (see "Tests You Cannot Write at Your Seam"). If an AC genuinely belongs elsewhere, escalate.
 
 ---
 

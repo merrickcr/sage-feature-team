@@ -11,6 +11,7 @@ What it copies (always overwritten on re-run):
   agents/                              -> <project>/.sage/agents/
   _tools/load_agents.py                -> <project>/.sage/_tools/load_agents.py
   _tools/update_story_status.py        -> <project>/.sage/_tools/update_story_status.py
+  _tools/verify_ac_map.py              -> <project>/.sage/_tools/verify_ac_map.py
   HANDBOOK.md                          -> <project>/.sage/HANDBOOK.md
   sage-config.SCHEMA.md                -> <project>/.sage/sage-config.SCHEMA.md
   templates/                           -> <project>/.sage/templates/
@@ -57,6 +58,7 @@ SAGE_FILES = [
     ("agents/tester.md",                         "agents/tester.md"),
     ("_tools/load_agents.py",                    "_tools/load_agents.py"),
     ("_tools/update_story_status.py",            "_tools/update_story_status.py"),
+    ("_tools/verify_ac_map.py",                  "_tools/verify_ac_map.py"),
     ("HANDBOOK.md",                              "HANDBOOK.md"),
     ("sage-config.SCHEMA.md",                    "sage-config.SCHEMA.md"),
     ("templates/MESSAGE_TEMPLATE.md",            "templates/MESSAGE_TEMPLATE.md"),
@@ -87,6 +89,8 @@ SKILL_FILES = [
 # installed copy needs them rooted at .sage/.
 SKILL_PATH_REWRITES = [
     ("python _tools/load_agents.py",                          "python .sage/_tools/load_agents.py"),
+    ("python _tools/update_story_status.py",                  "python .sage/_tools/update_story_status.py"),
+    ("python _tools/verify_ac_map.py",                        "python .sage/_tools/verify_ac_map.py"),
     ("`HANDBOOK.md`",                                         "`.sage/HANDBOOK.md`"),
     ("`sage-config.SCHEMA.md`",                               "`.sage/sage-config.SCHEMA.md`"),
     ("`guides/",                                              "`.sage/guides/"),
@@ -98,6 +102,8 @@ SKILL_PATH_REWRITES = [
     ("`agents/product-owner.md`",                             "`.sage/agents/product-owner.md`"),
     ("`agents/test-creator.md`",                              "`.sage/agents/test-creator.md`"),
     ("`_tools/load_agents.py`",                               "`.sage/_tools/load_agents.py`"),
+    ("`_tools/update_story_status.py`",                       "`.sage/_tools/update_story_status.py`"),
+    ("`_tools/verify_ac_map.py`",                             "`.sage/_tools/verify_ac_map.py`"),
     ("`examples/chatbot/.sage/sage-tester-config.yaml`",      "`.sage/sage-tester-config.yaml`"),
     ("`examples/chatbot/.sage/`",                             "`.sage/`"),
 ]
