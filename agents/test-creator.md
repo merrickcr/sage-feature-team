@@ -36,12 +36,22 @@ Following the base workflow from _BASE.md:
    - Spec: `_output/FEATURE_SPEC_{name}.md` (feature-level context — overview, edge cases, tech notes)
    - Stories dir: `_output/FEATURE_STORIES_{name}/STORY-*.yaml` (one file per story; `acceptance_criteria` lives inside each story)
 4. **Determine target stories** — task message may name specific story IDs; otherwise, target every story whose YAML has `status: TODO` AND every entry in its `dependencies:` resolves to a story whose YAML has `status: DONE`
-5. **Flip target stories to `CREATE_TESTS`** by editing the `status:` field in each target story's YAML BEFORE writing any tests
+5. **Flip target stories to `CREATE_TESTS`** using the helper script (NEVER edit story YAMLs directly):
+   ```bash
+   python .sage/_tools/update_story_status.py STORY-N CREATE_TESTS \
+       --stories-dir _output/FEATURE_STORIES_{name}
+   ```
+   (Use `_tools/update_story_status.py` if running from the sage-feature-team source itself.)
+   The helper does an atomic, locked YAML update — concurrent workers won't trample each other. Check the JSON return value; if `success: false`, escalate.
 6. **Consult project instructions** — Read referenced files for test structure, naming, framework
 7. **Create the test file(s)** using project conventions (location, naming, framework)
    - Cover every AC listed in each target story's `acceptance_criteria:` block
    - Tag test functions by story ID per the project's tagging convention so downstream agents can map test → story
-8. **Flip target stories from `CREATE_TESTS` to `IN_DEV`** by editing the `status:` field once their tests exist
+8. **Flip target stories from `CREATE_TESTS` to `IN_DEV`** using the helper script:
+   ```bash
+   python .sage/_tools/update_story_status.py STORY-N IN_DEV \
+       --stories-dir _output/FEATURE_STORIES_{name}
+   ```
 9. **Update progress file** — Mark Tests: DONE, list test function names AND story IDs covered
 10. **Complete the 3-way handshake** (see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
 
@@ -78,13 +88,12 @@ choose, depending on framework idioms:
 - [RULE] Place test files where project instructions say (don't invent paths)
 - [RULE] Use the test framework the project uses (don't switch frameworks)
 - [RULE] Test names describe behavior (not "test_ac1", but "test_login_with_valid_email")
-- [RULE] **Story YAMLs:** flip target stories `status: TODO` → `status: CREATE_TESTS` BEFORE writing tests, `status: CREATE_TESTS` → `status: IN_DEV` AFTER writing tests
+- [RULE] **Story YAMLs:** flip target stories `status: TODO` → `status: CREATE_TESTS` BEFORE writing tests, `status: CREATE_TESTS` → `status: IN_DEV` AFTER writing tests, **always via `update_story_status.py`** (never by hand-editing the YAML)
 - [RULE] AC come from the story's own `acceptance_criteria:` list — NOT from the spec (the spec no longer has an AC section)
 - [RULE] Only target stories whose dependencies all resolve to `status: DONE` (skip the rest — they'll be handled in a later pass)
 - [RULE] Tag/group test functions by story ID so the mapping is recoverable from the test file
 - [RULE] If a target story's `acceptance_criteria:` list is empty, escalate (don't invent tests)
-- [RULE] When editing a story YAML, change ONLY the `status:` field — do not touch `id`, `title`, `dependencies`, `description`, or `acceptance_criteria`
-- [RULE] Preserve YAML validity after every edit (the file must still parse)
+- [RULE] Status flips go through `update_story_status.py` — it changes ONLY the `status:` field (and `blocked_reason:` on BLOCKED transitions) and preserves the rest. Don't hand-edit `id`, `title`, `dependencies`, `description`, or `acceptance_criteria`.
 - [RULE] Update progress file BEFORE reporting
 - [STOP] NO test execution
 - [STOP] NO code implementation

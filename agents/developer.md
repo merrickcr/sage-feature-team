@@ -57,7 +57,13 @@ Following the base workflow from _BASE.md:
 4. **Confirm target stories are `status: IN_DEV`** in their YAMLs (no status flip needed at start — they're already there from TestCreator, or were flipped back by Tester on a re-cycle)
 5. **Consult project instructions** — Read referenced files for code conventions, file structure
 6. **Fix implementation code** to make failing tests pass (without breaking passing tests)
-7. **Flip target stories from `status: IN_DEV` to `status: TESTING`** by editing the `status:` field in each target story's YAML once your code changes are complete
+7. **Flip target stories from `status: IN_DEV` to `status: TESTING`** using the helper script (NEVER edit story YAMLs directly):
+   ```bash
+   python .sage/_tools/update_story_status.py STORY-N TESTING \
+       --stories-dir _output/FEATURE_STORIES_{name}
+   ```
+   (Use `_tools/update_story_status.py` if running from the sage-feature-team source itself.)
+   The helper does an atomic, locked YAML update. Check the JSON return value; if `success: false`, escalate.
 8. **Update progress file** — Mark Development: DONE, list modified files AND story IDs touched
 9. **Complete the 3-way handshake** (see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
 
@@ -77,10 +83,9 @@ Following the base workflow from _BASE.md:
 - [RULE] No scope creep beyond what the spec asks for — don't refactor unrelated code
 - [RULE] Follow project conventions (consult instruction files)
 - [RULE] If no spec is provided (dev-test mode), fix only the listed failing tests AND skip story-status updates (no story YAMLs in dev-test mode)
-- [RULE] **Story YAMLs:** flip target stories `status: IN_DEV` → `status: TESTING` only when you believe the implementation satisfies their AC; do not flip stories you didn't actually work on
+- [RULE] **Story YAMLs:** flip target stories `status: IN_DEV` → `status: TESTING` via `update_story_status.py` only when you believe the implementation satisfies their AC; do not flip stories you didn't actually work on
 - [RULE] Read each target story's `acceptance_criteria:` from its YAML — that is the per-story spec for your implementation
-- [RULE] When editing a story YAML, change ONLY the `status:` field — do not touch other fields
-- [RULE] Preserve YAML validity after every edit (the file must still parse)
+- [RULE] Status flips go through `update_story_status.py` — it changes ONLY the `status:` field and preserves the rest. Don't hand-edit other fields.
 - [RULE] Never flip a story directly to `DONE` — only Tester does that, and only after a green test run
 - [RULE] Update progress file BEFORE reporting
 

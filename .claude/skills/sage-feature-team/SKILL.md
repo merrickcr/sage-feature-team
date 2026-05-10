@@ -1,21 +1,17 @@
 ---
 name: sage-feature-team
-description: Complete feature development workflow (ProductOwner → TestCreator → Developer → Tester)
-when_to_use: When you want to build a complete feature from requirements through specification, tests, implementation, and validation
+description: Complete feature development workflow (ProductOwner → parallel TestCreator/Developer/Tester per story)
+when_to_use: When you want to build a complete feature from requirements through specification, tests, implementation, and validation — with multiple stories worked in parallel
 ---
 
 # Sage Feature Team Skill
 
-You are the **Team Lead / Orchestrator** for a multi-agent feature development workflow. You run in the main conversation; the four worker agents (ProductOwner, TestCreator, Developer, Tester) report back to you (`@User`).
+You are the **Team Lead / Orchestrator** for a multi-agent feature development workflow. You run in the main conversation; worker agents report back to you (`@User`).
 
-Your job:
+The workflow has two phases:
 
-1. Parse user input → determine mode and feature name
-2. Load agent prompts via the Python loader
-3. Create a team and spawn the agents
-4. Route work in order, monitor ACKs and completions
-5. Manage Developer↔Tester cycles until tests pass or `max_cycles` is hit
-6. Report success or escalate blockers
+1. **Phase 1 — ProductOwner (single agent, sequential).** A long-lived ProductOwner agent creates the spec and per-story YAML files, iterates on user feedback, and waits for `APPROVED`.
+2. **Phase 2 — Parallel scheduler.** Once stories are approved, you become a scheduler. You scan the stories directory and **spawn ephemeral, per-story worker agents** (one per ready story, up to `max_parallel_workers`). Each worker handles one story, reports completion, and is shut down. You re-scan and spawn the next batch until every story is `DONE` or escalated.
 
 You don't decide HOW work is done in any particular project — that comes from each agent's `.sage/sage-<agent>-config.yaml`, which the loader bakes into the agent prompts.
 
@@ -24,17 +20,24 @@ You don't decide HOW work is done in any particular project — that comes from 
 ## Architectural Reminder
 
 ```
-sage-config.yaml          ← team/paths config
+sage-config.yaml          ← team/paths/limits config
 .sage/sage-<role>-config  ← per-agent project instructions (instructions list)
 agents/_BASE.md           ← shared protocol + {PROJECT_INSTRUCTIONS} hook
 agents/<role>.md          ← generic job description
    |
    v  load_agents.py assembles base + role + instructions
    v
-Agent prompt (fully rendered)
+Agent prompt (fully rendered) — same prompt reused for every worker of that role
 ```
 
-The loader handles all variable substitution. You don't substitute anything yourself.
+Stories live as **per-story YAML files**:
+```
+_output/FEATURE_STORIES_<feature_name>/STORY-1.yaml
+_output/FEATURE_STORIES_<feature_name>/STORY-2.yaml
+...
+```
+
+Each YAML carries its own status. Concurrent workers update their own story file via `_tools/update_story_status.py` (locked, atomic).
 
 ---
 
@@ -45,11 +48,14 @@ From the user's invocation, compute these values once and reuse them throughout:
 - **mode** — `dev-test-only` if `--dev-test-only` flag present (with optional `--full-regression` or `--targeted <test_names>`), else `full`
 - **feature_name** — full mode: extract from user's text and convert to snake_case (e.g., "Add Dark Mode" → `add_dark_mode`); dev-test mode: `dev_test_cycle`
 - **output_dir** — from `sage-config.yaml` → `paths.output_dir` (typically `_output`)
-- **max_cycles** — from `--max-cycles N` if given, else from `sage-config.yaml` → `limits.max_cycles`
+- **max_cycles** — from `--max-cycles N` if given, else from `sage-config.yaml` → `limits.max_cycles` (per-story dev↔test cap)
+- **max_parallel_workers** — from `sage-config.yaml` → `limits.max_parallel_workers` (default 4)
+- **global_timeout_seconds** — from `sage-config.yaml` → `limits.global_timeout_seconds` (default 3600)
 - **spec_file** — `<output_dir>/FEATURE_SPEC_<feature_name>.md`
+- **stories_dir** — `<output_dir>/FEATURE_STORIES_<feature_name>/`
 - **progress_file** — `<output_dir>/FEATURE_<feature_name>_PROGRESS.md`
 
-**`--resume <feature_name>`** continues from an existing progress file; mode comes from the progress file.
+**`--resume <feature_name>`** continues from existing artifacts.
 
 When you send messages to agents below, write the message naturally with these literal values inlined — not Python f-string syntax with `{feature_name}` placeholders.
 
@@ -57,53 +63,25 @@ When you send messages to agents below, write the message naturally with these l
 
 ## Step 2: Load Agent Prompts
 
-Run the Python loader:
-
 ```bash
 python _tools/load_agents.py full
-# or
-python _tools/load_agents.py dev-test-only
 ```
 
-Expected JSON response:
+(Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
 
-```json
-{
-  "success": true,
-  "mode": "full",
-  "team_name": "<from sage-config.yaml team.name>",
-  "agent_names": ["ProductOwner", "TestCreator", "Developer", "Tester"],
-  "agents": {
-    "ProductOwner": "<fully rendered prompt>",
-    "TestCreator": "<fully rendered prompt>",
-    "Developer":   "<fully rendered prompt>",
-    "Tester":      "<fully rendered prompt>"
-  },
-  "sage_dir": "<resolved path to .sage/ directory>",
-  "config_summary": {
-    "project_name": "...",
-    "absolute_root_dir": "..."
-  }
-}
-```
+Expected JSON: `success: true`, `agents` containing rendered prompts for `ProductOwner`, `TestCreator`, `Developer`, `Tester`. Validate as in the previous version of this skill; if `success: false`, surface the error and stop.
 
-**Validate:**
-- `success == true`
-- `agent_names` matches the mode (4 for `full`, 2 for `dev-test-only`)
-- Each agent in `agent_names` has an entry in `agents`
-- If `sage_dir` is null, agents will get a "no project instructions configured" placeholder — warn the user but continue
-
-If validation fails, surface the loader's `error` to the user and stop.
+You will reuse the rendered `TestCreator`, `Developer`, and `Tester` prompts as the prompt for every per-story worker of that role. The ProductOwner prompt is used once for Phase 1.
 
 ---
 
 ## Step 3: Preflight
 
-- `sage-config.yaml` was readable (loader confirmed by returning success)
-- The project's `output_dir` exists (or create it with `mkdir -p`)
-- For `full` mode with a feature name: no progress file collision (or use `--resume`)
+- `sage-config.yaml` was readable (loader confirmed)
+- `output_dir` exists (or create it)
+- For full mode with a feature name: no spec/stories collision (or use `--resume`)
 
-Don't preflight project-specific things (test runners, servers, frameworks). Those are owned by the agents' `.sage/` instructions, and Tester will validate them at run time.
+Don't preflight project-specific things (test runners, servers). Those belong to the agents' `.sage/` instructions.
 
 ---
 
@@ -115,127 +93,255 @@ TeamCreate(team_name=team_name, description="Sage feature development team")
 
 ---
 
-## Step 5: Spawn Workers
+## Step 5: Phase 1 — ProductOwner (sequential, single agent)
 
-For each name in `agent_names`, in order:
+Skip this whole step in `dev-test-only` mode — go straight to Phase 2 (Step 6) with the existing stories directory.
+
+### 5a. Spawn ProductOwner
 
 ```python
 Agent(
-  name=agent_name,
-  prompt=agents[agent_name],
+  name="ProductOwner",
+  prompt=agents["ProductOwner"],
   team_name=team_name,
   subagent_type="general-purpose"
 )
 ```
 
-Wait 2-3 seconds between spawns. Agents will idle until you send them a SendMessage task — `_BASE.md` enforces a Task-Waiting Rule. If any agent acts on its own before receiving a task, immediately tell it to STOP and wait.
+Wait 2-3 seconds. The agent idles until you SendMessage it.
+
+### 5b. Send the spec task
+
+SendMessage to `ProductOwner`:
+- `@User: [Feature: <feature_name>]` opener
+- `[Task: po-spec-<feature_name>]`
+- The user's requirements (verbatim)
+- `Spec file: <spec_file>`
+- `Stories dir: <stories_dir>`
+- `Progress file: <progress_file>`
+- `Reference: HANDBOOK.md`
+
+Run **ACK + completion monitoring** (Step 8).
+
+### 5c. Forward questions to the User; require explicit APPROVED
+
+- When ProductOwner asks questions: forward them to the User; relay the answer back. Don't answer for the user.
+- When ProductOwner reports the spec is ready: forward to the User: "ProductOwner has completed the spec — please review and reply APPROVED to proceed." Wait for explicit `APPROVED`.
+
+### 5d. Shut down ProductOwner
+
+After ProductOwner's completion handshake, you don't need it anymore. Stop the agent task to free its slot:
+
+```python
+TaskStop(name="ProductOwner")   # or TaskList → TaskStop by id
+```
+
+If `TaskStop` isn't available or fails, leave the idle agent alone — it won't act again without a task. Move on.
 
 ---
 
-## Step 6: Route Work
+## Step 6: Phase 2 — Parallel Scheduler
 
-**Message-building rule:** task messages pass *context only* (feature name, paths, cycle number, what failed). Don't restate behavior the agent already knows from its role file (`agents/<role>.md`). If you find yourself writing "Job: do X, Y, Z" where X/Y/Z are part of the agent's job description — drop it. The agent already knows.
+You now own a scheduling loop. You read the stories directory, spawn per-story workers, wait for any to complete, and re-scan. The loop ends when every story is `DONE` (or escalated as terminal `BLOCKED`/cycle-exhausted), or the global timeout fires.
 
+### 6a. Initialize state
 
+In your own working memory (no need to write to disk), maintain:
 
-### Dev-Test Mode
+```
+in_flight       = {}   # STORY-N -> {role, agent_name, started_at, cycle_n}
+cycle_count     = {}   # STORY-N -> int (Developer→Tester rounds completed; counts when Tester re-flips to IN_DEV)
+escalated       = set()  # STORY-Ns that hit max_cycles or are unrecoverable
+start_time      = now()
+```
 
-Skip directly to **Step 7 (Cycle Loop)** with `cycle_count = 1`. The first message goes to **Developer** (never Tester first), even though tests already exist — Developer needs to know which tests are failing before fixing.
+### 6b. Scheduling rule (per scan)
 
-If you need to discover what's failing first, send Tester an "initial discovery" task before the cycle loop.
+Read every YAML in `stories_dir`. For each story, compute eligibility:
 
-### Full Mode
+| Story status | Deps all DONE? | In flight? | Escalated? | Action |
+|---|---|---|---|---|
+| TODO         | yes | no | no | Eligible for **TestCreator** worker |
+| CREATE_TESTS | —   | — | — | Already in flight (a TestCreator owns it) — skip |
+| IN_DEV       | yes | no | no | Eligible for **Developer** worker |
+| TESTING      | yes | no | no | Eligible for **Tester** worker (story-scoped) |
+| DONE         | —   | — | — | Done — skip |
+| BLOCKED      | —   | — | — | Skip (annotate; user can resolve) |
 
-#### Phase 1 — ProductOwner
+Sort eligible stories by ID (lowest STORY-N first). Skip any story whose ID is in `in_flight` or `escalated`.
 
-Send a SendMessage to `ProductOwner` whose body includes:
-- `@User: [Feature: <feature_name>]` opener
-- `[Task: po-spec-<feature_name>]` task ID
-- The user's requirements (verbatim)
+Available slots = `max_parallel_workers - len(in_flight)`. Spawn `min(slots, len(eligible))` workers.
+
+If `len(in_flight) == 0` AND no eligible stories AND not every story is `DONE`: **deadlock**. Escalate (Step 6f).
+
+### 6c. Spawn a per-story worker
+
+Worker name pattern: `<Role>-<STORY-N>` (e.g., `TestCreator-STORY-3`, `Developer-STORY-7`, `Tester-STORY-2`). Names must be unique within the team — if a worker for the same story+role was previously spawned and shut down, append a `-cN` suffix where N is the cycle count for that story (e.g., `Developer-STORY-3-c2`).
+
+```python
+Agent(
+  name=worker_name,
+  prompt=agents[role],         # rendered prompt for the role; same for every worker of that role
+  team_name=team_name,
+  subagent_type="general-purpose"
+)
+# wait ~2s
+SendMessage(to=worker_name, summary="...", message=<task message>)
+```
+
+Track `in_flight[STORY-N] = {role, agent_name: worker_name, started_at: now(), cycle_n: cycle_count[STORY-N]}`.
+
+### 6d. Per-role task message templates
+
+All worker task messages should be self-contained — workers don't share state with each other. Always pass the story id, paths, and references explicitly.
+
+#### TestCreator worker (for a TODO story)
+
+SendMessage:
+- `@User: [Feature: <feature_name>] (Story: <STORY-N>)` opener
+- `[Task: tc-<STORY-N>-<feature_name>]`
+- `Target story: <STORY-N>` (this is your single target — no auto-discovery)
+- `Stories dir: <stories_dir>`
 - `Spec file: <spec_file>`
 - `Progress file: <progress_file>`
 - `Reference: HANDBOOK.md`
 
-Use the literal `feature_name`, `spec_file`, `progress_file` values from Step 1 — not placeholder syntax. The agent's role file (`agents/product-owner.md`) defines what to do with this context.
+#### Developer worker (for an IN_DEV story)
 
-Then run the **ACK + completion monitoring** described in Step 8.
-
-**When ProductOwner has questions:** Don't answer for the user. Forward the questions to the User and wait for their response before relaying back.
-
-**When ProductOwner reports the spec is ready:** Don't approve it yourself. Forward to the User: "ProductOwner has completed the spec — please review and reply APPROVED to proceed." Wait for explicit `APPROVED` before going to Phase 2.
-
-#### Phase 2 — TestCreator
-
-Send a SendMessage to `TestCreator` whose body includes:
-- `@User: [Feature: <feature_name>]` opener
-- `[Task: tc-tests-<feature_name>]` task ID
-- `Spec file: <spec_file>` (literal path)
-- `Progress file: <progress_file>` (literal path)
+SendMessage:
+- `@User: [Feature: <feature_name>] (Story: <STORY-N>, Cycle: <cycle_n>/<max_cycles>)` opener
+- `[Task: dev-<STORY-N>-c<cycle_n>-<feature_name>]`
+- `Target story: <STORY-N>`
+- `Stories dir: <stories_dir>`
+- `Spec file: <spec_file>`
+- `Progress file: <progress_file>`
+- If `cycle_n > 1`: paste the previous Tester run's `TEST_FAILURE` lines for this story verbatim
 - `Reference: HANDBOOK.md`
 
-Then ACK + completion monitoring. After completion, initialize `cycle_count = 1` and proceed to Step 7.
+#### Tester worker (for a TESTING story — story-scoped)
+
+SendMessage:
+- `@User: [Feature: <feature_name>] (Story: <STORY-N>)` opener
+- `[Task: tester-<STORY-N>-c<cycle_n>-<feature_name>]`
+- `Target story: <STORY-N>`
+- `Test scope: story <STORY-N>` (LITERAL — Tester role file uses this to construct a story-scoped selector and to know it must only flip this story)
+- `Stories dir: <stories_dir>`
+- `Progress file: <progress_file>`
+- `Reference: HANDBOOK.md`
+
+The Tester role file has the story-scoped selector logic: it reads the project's tagging convention from `.sage/sage-test-creator-config.yaml` and runs only that story's tests. Multiple Tester workers can run concurrently as long as the project's test isolation allows it.
+
+### 6e. Wait for ANY worker to complete; reschedule
+
+After spawning a batch, you wait. Don't block on a specific worker — wait on the team and act on whichever completes first.
+
+For each completion (handshake `[ACK]+DATA` from a worker):
+
+1. **Run the standard handshake** (Step 8 / `HANDBOOK.md`): reply `[SYN-ACK]`, accept `[ACK]+DATA`, send a routing message that acts as the implicit final ACK. The routing message can simply be: `@<worker>: Acknowledged. You are released — shutting down.`
+2. **Re-read the completed story's YAML** to learn its new status (the worker already flipped it via `update_story_status.py`).
+3. **Update bookkeeping:**
+   - If the worker was Tester and the story is now `IN_DEV` (tests failed): `cycle_count[STORY-N] += 1`. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and report a per-story escalation (Step 6f).
+   - If the worker was Tester and the story is now `DONE`: nothing more to do for this story.
+   - If the worker was TestCreator and the story is now `IN_DEV`: ready for Developer next scan.
+   - If the worker was Developer and the story is now `TESTING`: ready for Tester next scan.
+4. **Shut down the worker** to free the slot:
+   ```python
+   TaskStop(name=worker_name)
+   ```
+   (If TaskStop is unavailable, the idle worker won't act again — moving on is fine.)
+5. **Remove from `in_flight`** and re-run the scheduling rule (6b) to pick up newly eligible stories.
+
+### 6f. Per-story escalation
+
+When a story hits `max_cycles` (Developer↔Tester loops without success) or a worker reports an unrecoverable BLOCKER:
+
+- Add it to `escalated`
+- Mark its YAML `BLOCKED` via the helper (with a reason):
+  ```bash
+  python _tools/update_story_status.py STORY-N BLOCKED \
+      --stories-dir <stories_dir> --reason "max_cycles exceeded after <n> rounds"
+  ```
+- Report to the User: `@User: [Feature: <feature_name>] STORY-N escalated — <reason>. Continuing other stories.`
+- Continue the scheduler — one stuck story doesn't stop the rest
+
+### 6g. Global wall-clock kill switch
+
+At the top of every scan, check `now() - start_time >= global_timeout_seconds`. If hit:
+
+- Stop spawning new workers
+- Wait briefly (one more tick) for in-flight workers to complete naturally
+- Then `TaskStop` any still-running workers
+- Mark every still-non-DONE story as `BLOCKED` with reason `global_timeout`
+- Jump to Step 7 (Final Report) with `Status: GLOBAL_TIMEOUT`
+
+### 6h. Loop exit
+
+The scheduler loop exits cleanly when:
+- Every story in `stories_dir` is `status: DONE` → success
+- OR every remaining non-DONE story is in `escalated` → partial success (some stories escalated)
+- OR the global timeout fired → escalation
 
 ---
 
-## Step 7: Dev/Test Cycle Loop
+## Step 7: Final Report
 
-Used by both modes. Developer fixes code; Tester runs tests.
+### Success (Full Mode, all stories DONE)
 
 ```
-WHILE cycle_count <= max_cycles:
-  [1] Send Developer task with failing test names
-      Run ACK + completion monitoring
-      Read progress file: confirm Development = DONE
-  [2] Send Tester task
-      Run ACK + completion monitoring
-      Read progress file: capture Testing result
-  [3] If PASSED  → break (success)
-      If FAILED and cycle_count < max → extract failures, cycle_count++
-      If FAILED and cycle_count == max → escalate "Max cycles exceeded"
+@User: [Feature: <feature_name>] Feature Development Complete
+
+Status: SUCCESS
+Stories: <N> total, all DONE
+Cycles used (per story): STORY-1=1, STORY-2=2, ...
+Wall clock: <elapsed>s
+
+Artifacts:
+- Spec:        <spec_file>
+- Stories dir: <stories_dir>
+- Tests:       see git diff
+- Code:        see git diff
 ```
 
-### Developer message
+### Partial Success (some stories escalated)
 
-Send to `Developer`, body includes:
-- `@User: [Feature: <feature_name>] ... (Cycle <n>/<max>)` opener
-- `[Task: dev-cycle-<n>-<feature_name>] [Cycle: <n>/<max>]`
-- Full mode: `Spec file: <spec_file>` and `Progress: <progress_file>`. Dev-test mode: omit both.
-- `Test file: <from TestCreator's completion report>` (don't invent — use what TestCreator reported it created)
-- If cycle > 1: paste previous cycle's `TEST_FAILURE` lines verbatim
-- `Failing tests to fix:` followed by a bulleted list of test names
-- `Reference: HANDBOOK.md`
+```
+@User: [Feature: <feature_name>] Feature Development Partially Complete
 
-The Developer's role file (`agents/developer.md`) defines what to do with this context — don't restate cycle-vs-cycle behavior in your message.
+Status: PARTIAL
+Stories DONE:      STORY-1, STORY-3, ...
+Stories ESCALATED: STORY-2 (max_cycles), STORY-5 (BLOCKED: ...)
 
-### Tester message
+See <stories_dir> for blocked_reason on each escalated story.
+```
 
-Send to `Tester`, body includes:
-- `@User: [Feature: <feature_name>] ... (Cycle <n>/<max>)` opener
-- `[Task: tester-<n>-<feature_name>] [Cycle: <n>/<max>]`
-- `Test scope:` either `full regression` or a list of specific test names (dev-test `--targeted`)
-- Full mode: `Progress: <progress_file>`. Dev-test mode: omit.
-- `Reference: HANDBOOK.md`
+### Global Timeout
 
-Tester does NOT need a test file path — it reads its own `.sage/sage-tester-config.yaml` instructions to know what to run.
+```
+@User: [Feature: <feature_name>] Workflow Hit Global Timeout
 
-### Idle = completion
+Status: GLOBAL_TIMEOUT after <global_timeout_seconds>s
+Stories DONE: ...
+Stories left: ...
+```
 
-When an agent sends `STATUS: COMPLETE | READY: yes` and then goes idle, that idle notification IS the completion signal. Don't wait for additional messages — read the progress file and route to the next agent immediately.
+### Dev-Test Mode
+
+(Phase 1 skipped; Phase 2 still applies but works against the existing stories directory. If no stories directory exists, fall back to the legacy `/sage-dev-test` flow — recommend the user invoke that skill instead.)
 
 ---
 
-## Step 8: Monitoring (ACK + Completion)
+## Step 8: Monitoring (ACK + Completion + Handshake)
 
 ### ACK monitoring (every task you send)
 
 | T | Action |
 |---|---|
 | 0–30s | Wait for `STATUS: ACKNOWLEDGED` |
-| 30s | If no ACK, send: `@<Agent>: Did you receive my message?` |
-| 45s | If no ACK, send: `@<Agent>: Please send ACK when ready.` |
-| 60s | If no ACK, **escalate to User** (ACK timeout) |
+| 30s | If no ACK, send: `@<worker>: Did you receive my message?` |
+| 45s | If no ACK, send: `@<worker>: Please send ACK when ready.` |
+| 60s | If no ACK, **escalate**: shut down the worker, mark its story `BLOCKED` with reason `ack_timeout`, continue scheduling |
 
-Use `ScheduleWakeup` so you don't block while waiting.
+Use `ScheduleWakeup` so you don't block while waiting; or use `Monitor` on the team to receive worker messages reactively.
 
 ### Completion monitoring
 
@@ -243,63 +349,21 @@ After ACK:
 
 | T | Action |
 |---|---|
-| 0–5min | Wait for completion message |
-| 5min | Send a gentle status check |
-| 8min | **Escalate to User** (work timeout) |
+| 0–`timeout_work_hard`s (default 480s = 8min) | Wait for completion |
+| `timeout_work_hard / 2` | Send a gentle status check |
+| `timeout_work_hard` | **Escalate**: shut down the worker, mark its story `BLOCKED` with reason `work_timeout`, continue scheduling |
 
 ### Handshake (Team Lead side)
 
-When an agent sends `[SYN] <message_id>`:
-1. Within 1–2 seconds, reply with `[SYN-ACK] <same message_id>`
+When a worker sends `[SYN] <message_id>`:
+1. Within 1–2s, reply `[SYN-ACK] <same message_id>`
 2. Wait for `[ACK] <same message_id>` + completion data
-3. Process the data (read progress file, etc.)
-4. Send routing message to next agent — this acts as the implicit final ACK
-5. Track processed message IDs; if you see a duplicate `[SYN]` or `[ACK]`, resend the same response (don't reprocess)
+3. Process the data (re-read story YAML)
+4. Send the routing/release message — this acts as the implicit final ACK and tells the worker it's released
+5. `TaskStop` the worker to free the slot
+6. Track processed message IDs; on duplicate `[SYN]` or `[ACK]`, resend the same response (don't reprocess)
 
-Full protocol: HANDBOOK.md → "Message Delivery Handshake Protocol".
-
----
-
-## Step 9: Final Report
-
-### Success (Full Mode)
-
-```
-@User: [Feature: {feature_name}] Feature Development Complete
-
-Status: SUCCESS
-Cycles used: {cycle_count}/{max_cycles}
-
-Artifacts:
-- Spec:  {output_dir}/FEATURE_SPEC_{feature_name}.md
-- Tests: <from TestCreator's report>
-- Code:  see git diff
-
-All acceptance criteria tested and passing.
-```
-
-### Success (Dev-Test Mode)
-
-```
-@User: [Dev-Test] Test/Fix Cycle Complete
-
-Status: SUCCESS
-Cycles used: {cycle_count}/{max_cycles}
-
-All tests passing. See git diff for code changes.
-```
-
-### Escalation
-
-```
-@User: [Feature: {feature_name}] Workflow Blocked
-
-Status: ESCALATION
-Blocker: <ACK timeout | Work timeout | Max cycles exceeded | Test hang>
-
-Details: <specific failures, test names, last known state>
-Recommended action: <what the user should do>
-```
+Full protocol: `HANDBOOK.md` → "Message Delivery Handshake Protocol".
 
 ---
 
@@ -307,18 +371,21 @@ Recommended action: <what the user should do>
 
 **DO:**
 - Standardize feature name to snake_case BEFORE sending to any agent
-- Read progress file BEFORE every routing decision (file is source of truth, not agent messages)
-- After Phase 2 in full mode: route to **Developer FIRST**, then Tester (never Tester first in a cycle's first iteration)
-- Treat agent idle as completion signal — read progress file, route immediately
-- Send `[SYN-ACK]` within 1–2 seconds of receiving `[SYN]`
-- Track processed message IDs to dedupe handshake retries
+- Phase 1: ProductOwner is single, sequential, long-lived — wait for explicit `APPROVED` before Phase 2
+- Phase 2: Re-read the stories directory before every scheduling decision (YAML files are source of truth, not agent messages)
+- Spawn per-story workers up to `max_parallel_workers`; never exceed the cap
+- Use the role name + story id for worker names (`TestCreator-STORY-3`); add `-cN` suffix on re-cycles to keep names unique
+- Tester workers always run **story-scoped** in this skill (`Test scope: story STORY-N`) so multiple Testers can run in parallel
+- After each worker completes, `TaskStop` it to free the slot
+- Track per-story cycle counts independently — one stuck story doesn't drain the budget for others
 - Forward ProductOwner's questions / approval requests to the User — never answer or approve on their behalf
+- Always invoke status flips through `_tools/update_story_status.py`; never edit story YAMLs directly
 
 **DON'T:**
 - Don't spawn an Orchestrator agent — you ARE the orchestrator
-- Don't modify the progress file yourself (each agent owns its phase's section)
-- Don't make technical decisions — escalate questions to the appropriate agent or the User
-- Don't preflight project-specific things (test commands, servers) — that's Tester's job per its `.sage/` instructions
+- Don't keep workers alive between stories — spawn fresh per story so you can use natural shutdown for rate-limiting
+- Don't run a Tester worker with `Test scope: full regression` from this skill — full regression is for `/sage-dev-test` and the inline `/sage-tester --full`. The parallel scheduler relies on per-story scoping for safe concurrency.
+- Don't preflight project-specific things (test commands, servers) — that's each worker's job per its `.sage/` instructions
 - Don't substitute variables in agent prompts — the loader did that already
 
 ---
@@ -326,7 +393,8 @@ Recommended action: <what the user should do>
 ## References
 
 - `HANDBOOK.md` — Full protocol (handshake, ACK, escalation, Monitor tool)
-- `guides/ORCHESTRATOR_PATTERNS.md` — Reusable patterns shared between this skill and `sage-dev-test`
+- `guides/ORCHESTRATOR_PATTERNS.md` — Reusable Skill/Team Lead patterns
 - `references/ROUTING_REFERENCE.md` — Routing decision tree
-- `sage-config.SCHEMA.md` — Config field reference
+- `sage-config.SCHEMA.md` — Config field reference (including `max_parallel_workers`, `global_timeout_seconds`)
+- `_tools/update_story_status.py` — Atomic, locked story-status updater used by all workers
 - `examples/chatbot/.sage/` — Reference per-agent instruction configs

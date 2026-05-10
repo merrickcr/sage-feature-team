@@ -33,6 +33,8 @@ paths:
 
 limits:
   max_cycles: 5
+  max_parallel_workers: 4
+  global_timeout_seconds: 3600
 ```
 
 ---
@@ -122,7 +124,9 @@ Cycle and timeout bounds the Skill enforces while routing work.
 
 ```yaml
 limits:
-  max_cycles: 5                  # max Developer↔Tester rounds before escalation
+  max_cycles: 5                  # max Developer↔Tester rounds PER STORY before escalation
+  max_parallel_workers: 4        # cap on concurrently-spawned worker agents (parallel scheduler)
+  global_timeout_seconds: 3600   # wall-clock kill switch for the whole feature run (1 hour)
   timeout_ack_initial: 30        # seconds — initial ACK check
   timeout_ack_remind: 45         # seconds — reminder if no ACK
   timeout_ack_escalate: 60       # seconds — escalate if still no ACK
@@ -133,7 +137,9 @@ limits:
 
 | Field | Default | Purpose |
 |---|---|---|
-| `max_cycles` | 5 | Max Developer→Tester iterations before escalation |
+| `max_cycles` | 5 | Max Developer→Tester iterations **per story** (parallel scheduler tracks each story's counter independently) |
+| `max_parallel_workers` | 4 | Maximum number of ephemeral per-story worker agents the parallel scheduler runs at once |
+| `global_timeout_seconds` | 3600 | Hard wall-clock cap on a full-mode feature run after Phase 1 (PO) approval. Scheduler escalates remaining stories when hit |
 | `timeout_ack_initial` | 30 | First check for ACK (no action — just observe) |
 | `timeout_ack_remind` | 45 | Send a reminder if no ACK by now |
 | `timeout_ack_escalate` | 60 | Escalate if no ACK by now |

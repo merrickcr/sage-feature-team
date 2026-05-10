@@ -10,6 +10,7 @@ checkout.
 What it copies (always overwritten on re-run):
   agents/                              -> <project>/.sage/agents/
   _tools/load_agents.py                -> <project>/.sage/_tools/load_agents.py
+  _tools/update_story_status.py        -> <project>/.sage/_tools/update_story_status.py
   HANDBOOK.md                          -> <project>/.sage/HANDBOOK.md
   sage-config.SCHEMA.md                -> <project>/.sage/sage-config.SCHEMA.md
   templates/                           -> <project>/.sage/templates/
@@ -55,6 +56,7 @@ SAGE_FILES = [
     ("agents/developer.md",                      "agents/developer.md"),
     ("agents/tester.md",                         "agents/tester.md"),
     ("_tools/load_agents.py",                    "_tools/load_agents.py"),
+    ("_tools/update_story_status.py",            "_tools/update_story_status.py"),
     ("HANDBOOK.md",                              "HANDBOOK.md"),
     ("sage-config.SCHEMA.md",                    "sage-config.SCHEMA.md"),
     ("templates/MESSAGE_TEMPLATE.md",            "templates/MESSAGE_TEMPLATE.md"),
@@ -187,7 +189,9 @@ paths:
   # sage_dir: ".sage"
 
 limits:
-  max_cycles: 5
+  max_cycles: 5                # per-story dev↔test cycle cap
+  max_parallel_workers: 4      # concurrent ephemeral worker cap (parallel scheduler)
+  global_timeout_seconds: 3600 # wall-clock kill switch for full-mode feature runs
 """
 
 

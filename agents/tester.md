@@ -35,22 +35,39 @@ SendMessage(
 Following the base workflow, the Tester-specific steps are:
 
 3. **Read all story YAMLs** at `_output/FEATURE_STORIES_{name}/STORY-*.yaml`
-   - Your target set is every story file with `status: TESTING` (these are the ones Developer just finished)
+   - **Test scope** (from your task message) determines your target set:
+     - `story STORY-N` — single story; only run tests tagged for `STORY-N`
+     - `full regression` — every story currently at `status: TESTING`; run the full suite
+     - `<test_name_1, test_name_2, ...>` (dev-test mode `--targeted`) — run just those test names
    - Note which test functions belong to which story by reading the project's **story-ID tagging convention** from `.sage/sage-test-creator-config.yaml` (e.g. pytest marker, describe-block prefix, JUnit `@Tag`, naming convention) — TestCreator wrote tests using that same convention, and you must use the same one to map test → story
    - If no convention is documented, escalate to User — without it you cannot reliably decide which story each test outcome belongs to
 4. **Consult project instructions** — Read referenced files for setup, run, parse, cleanup
 5. **Execute pre-test setup** (per project instructions, if any)
-6. **Run tests** (per project instructions — command, flags, log location)
-7. **Start Monitor** — Tail test log so you stay responsive
-8. **Track results** — Parse output per project instructions, silent mode
-9. **Monitor completion** — **Check every 30 seconds if tests are done** (via ScheduleWakeup)
-10. **Execute post-test cleanup** (per project instructions, if any)
-11. **Update each target story's YAML** based on per-story test outcomes by editing the `status:` field:
-    - For each story currently `status: TESTING`: if **all** of its tagged tests passed → set `status: DONE`
-    - For each story currently `status: TESTING`: if **any** of its tagged tests failed → set `status: IN_DEV` (Developer will pick it up next cycle)
-    - Never set `status: DONE` if any test mapped to it failed, even if the rest of the suite is green
-    - Change ONLY the `status:` field in each YAML — do not touch other fields. YAML must remain valid.
-12. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+6. **Build the test selector** for your scope:
+   - `story STORY-N` — use the project's tagging convention to construct a selector that runs only that story's tests (e.g. pytest `-m "STORY-3"`, Jest `--testNamePattern "STORY-3"`, JUnit `@Tag("STORY-3")`). The mechanism lives in `.sage/sage-tester-config.yaml`. If the project instructions don't define a story-scoped selector, escalate.
+   - `full regression` — run the full suite per project instructions
+   - `<test_names>` — pass them as filters per project instructions
+7. **Run tests** (per project instructions — command, flags, log location, plus the selector from step 6)
+8. **Start Monitor** — Tail test log so you stay responsive
+9. **Track results** — Parse output per project instructions, silent mode
+10. **Monitor completion** — **Check every 30 seconds if tests are done** (via ScheduleWakeup)
+11. **Execute post-test cleanup** (per project instructions, if any)
+12. **Update each target story's YAML via the helper script** based on per-story test outcomes (NEVER edit YAMLs directly):
+    - For each story you ran tests for that is currently `status: TESTING`:
+      - All of its tagged tests passed → flip to `DONE`:
+        ```bash
+        python .sage/_tools/update_story_status.py STORY-N DONE \
+            --stories-dir _output/FEATURE_STORIES_{name}
+        ```
+      - Any of its tagged tests failed → flip back to `IN_DEV`:
+        ```bash
+        python .sage/_tools/update_story_status.py STORY-N IN_DEV \
+            --stories-dir _output/FEATURE_STORIES_{name}
+        ```
+    - In `story STORY-N` scope: only flip `STORY-N`. Other stories at `TESTING` weren't actually exercised by this run — leave them alone.
+    - Never flip a story to `DONE` if any test mapped to it failed, even if the rest of the suite is green.
+    - Check the JSON return value from each helper call; if `success: false`, escalate.
+13. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
     - Completion message MUST include: failure details, test count results, elapsed time, AND per-story outcomes
 
 ---
@@ -106,12 +123,14 @@ ScheduleWakeup(
 
 **STORY STATUS:**
 - [GO] Read all story YAMLs before reporting; map each test → story via story ID tags
-- [GO] Flip a story to `status: DONE` only when every test tagged for that story passed
-- [GO] Flip a story back to `status: IN_DEV` if any of its tagged tests failed
-- [GO] Leave story YAMLs outside the `TESTING` set untouched
-- [GO] Change ONLY the `status:` field — preserve all other YAML content; file must remain valid YAML
+- [GO] Flip a story to `DONE` only when every test tagged for that story passed
+- [GO] Flip a story back to `IN_DEV` if any of its tagged tests failed
+- [GO] Leave story YAMLs outside the run's actual scope untouched
+- [GO] Always flip via `update_story_status.py` — it preserves the YAML structure and is locked against concurrent writes
+- [STOP] NEVER hand-edit story YAMLs
 - [STOP] NEVER flip a story directly to `DONE` if any of its mapped tests failed
 - [STOP] NEVER mark a story `DONE` based on overall suite green-ness — check per-story tests
+- [STOP] In `story STORY-N` scope, NEVER flip stories other than `STORY-N` — they weren't actually exercised
 
 **BOUNDARIES:**
 - [STOP] NO test code modifications

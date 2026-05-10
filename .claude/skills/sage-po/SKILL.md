@@ -1,7 +1,7 @@
 ---
 name: sage-po
-description: Run the ProductOwner agent inline to create a feature spec + stories file
-when_to_use: When you want to create a new feature specification and stories file from a feature description, without running the full team workflow
+description: Run the ProductOwner agent inline to create a feature spec + per-story YAML files
+when_to_use: When you want to create a new feature specification and stories from a feature description, without running the full team workflow
 ---
 
 # Sage ProductOwner Skill (inline)
@@ -34,7 +34,9 @@ Run the loader to get the project-instruction–rendered ProductOwner prompt:
 python _tools/load_agents.py full
 ```
 
-From the JSON, extract `agents.ProductOwner` and `config_summary.absolute_root_dir`. **Read this rendered prompt as your role context** — especially the "Project-Specific Instructions" section (which lists project conventions you must follow) and the spec/stories format sections.
+(Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
+
+From the JSON, extract `agents.ProductOwner` and `config_summary.absolute_root_dir`. **Read this rendered prompt as your role context** — especially the "Project-Specific Instructions" section (project conventions you must follow), the spec format, the Story YAML format, and the rules.
 
 **Skip these parts of the rendered prompt** — they apply only when running as a spawned worker:
 - ACK message / `STATUS: ACKNOWLEDGED`
@@ -51,9 +53,9 @@ If `success` is false, surface the loader's `error` and stop.
 
 - Determine `output_dir` (default `_output`); create it if missing
 - Compute paths using `feature_name`:
-  - `spec_file = <output_dir>/FEATURE_SPEC_<feature_name>.md`
-  - `stories_file = <output_dir>/FEATURE_STORIES_<feature_name>.md`
-- If either file already exists, ask the user: overwrite, pick a different feature_name, or abort.
+  - `spec_file    = <output_dir>/FEATURE_SPEC_<feature_name>.md`
+  - `stories_dir  = <output_dir>/FEATURE_STORIES_<feature_name>/`
+- If `spec_file` already exists OR `stories_dir` exists and is non-empty, ask the user: overwrite, pick a different feature_name, or abort.
 
 ---
 
@@ -62,22 +64,37 @@ If `success` is false, surface the loader's `error` and stop.
 Following the ProductOwner role file (already rendered in Step 2):
 
 1. **Read project instructions** referenced in the rendered prompt that are relevant to spec/stories writing.
-2. **Create the spec file** (`spec_file`) with: Overview, Requirements, Acceptance Criteria (each with stable IDs `AC1`, `AC2`, …), Edge Cases, Technical Notes. Focus on WHAT, not HOW.
-3. **Create the stories file** (`stories_file`) using the format in `agents/product-owner.md` § Stories Format:
-   - Group AC into logical stories (every AC covered by exactly one story; no orphans/duplicates)
-   - Each story: ID (`STORY-1`, `STORY-2`, …), Title, Status (`TODO`), Dependencies (other story IDs or `none`), AC covered, Notes
-   - Include the Status Legend block from the format
+2. **Create the spec file** (`spec_file`) with: Overview, Requirements, Edge Cases, Technical Notes. **The spec does NOT contain an Acceptance Criteria section** — AC live inside the story YAMLs. Focus on WHAT, not HOW.
+3. **Create the stories directory** (`stories_dir`) and write one YAML file per story (`STORY-1.yaml`, `STORY-2.yaml`, …) using the Story YAML format from the rendered prompt:
+   ```yaml
+   id: STORY-N
+   title: ...
+   status: TODO
+   dependencies: []        # or ["STORY-1", ...]
+   description: |
+     ...
+   acceptance_criteria:
+     - id: ACx
+       text: ...
+   ```
+   - Group AC into logical, cohesive stories (every AC for the feature lives in exactly one story; no orphans, no duplicates)
+   - AC IDs (`AC1`, `AC2`, …) must be **unique across the entire feature** — don't reuse `AC1` in two different stories
+   - Story IDs are stable (`STORY-1`, `STORY-2`, …) — never renumber after approval
+   - Filename matches `id` (`STORY-1.yaml` contains `id: STORY-1`)
+   - Story dependencies form a DAG (no cycles)
+   - All stories start at `status: TODO`
 
-4. **Show the user a brief summary** (counts of requirements / AC / stories) and ask for review:
+4. **Show the user a brief summary** (counts of requirements / stories / total AC) and ask for review:
    - Either feedback (you'll iterate) or `APPROVED` (you finish)
 
-5. **On feedback**: update the files, summarize the diff, re-request approval. Loop.
+5. **On feedback**: update the spec/stories, summarize the diff, re-request approval. Loop.
 
 6. **On APPROVED**: report completion as plain text (no handshake):
    ```
-   Spec:    <spec_file>
-   Stories: <stories_file>
-   Stories created: <N> (all at TODO)
+   Spec:        <spec_file>
+   Stories dir: <stories_dir>
+   Stories:     STORY-1.yaml, STORY-2.yaml, ... (<N> total, all status: TODO)
+   AC:          <total_ac> distributed across <N> stories
    ```
 
 ---
@@ -87,9 +104,12 @@ Following the ProductOwner role file (already rendered in Step 2):
 - Snake_case feature name in ALL files
 - FEEDBACK ≠ APPROVAL — iterate until explicit `APPROVED`
 - Acceptance criteria must be testable
-- Every AC covered by exactly one story (no orphans, no duplicates)
+- Spec file has NO Acceptance Criteria section — AC live in story YAMLs
+- Every AC for the feature lives in exactly one story (no orphans, no duplicates)
+- AC IDs are unique across the whole feature, not just within a story
 - Story dependencies form a DAG (no cycles)
 - All stories start at `TODO`
+- YAML must be valid (parseable) — agents downstream load it programmatically
 - NO tests, NO code — spec and stories only
 
 ---
