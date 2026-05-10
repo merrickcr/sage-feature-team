@@ -5,7 +5,7 @@ Atomically update a single story YAML's `status:` field.
 Used by all worker agents (TestCreator, Developer, Tester) and the parallel
 scheduler in /sage-feature-team. Cross-platform per-file locking ensures
 concurrent workers don't trample each other if two updates land on the same
-story (rare but possible — e.g. a re-cycle).
+story (rare but possible -- e.g. a re-cycle).
 
 Story YAML schema (one file per story):
     id: STORY-3
@@ -49,7 +49,7 @@ the scheduler may use it for recovery.
 
 Implementation notes:
 - Uses ruamel.yaml if available (preserves comments/order). Falls back to
-  PyYAML, which doesn't preserve comments — agents are instructed to keep
+  PyYAML, which doesn't preserve comments -- agents are instructed to keep
   story YAMLs comment-free, so this is acceptable.
 - Per-file lock via msvcrt (Windows) or fcntl (POSIX), with a sentinel-file
   fallback. Lock scope is the single story YAML.
@@ -243,7 +243,7 @@ def update_story_status(story_file, story_id, new_status, reason=None, force=Fal
                 return {
                     "success": False,
                     "error": f"invalid transition {old_status} -> {new_status} for {story_id} "
-                             f"(allowed: {sorted(allowed) or 'none — terminal'})",
+                             f"(allowed: {sorted(allowed) or 'none -- terminal'})",
                     "old_status": old_status,
                     "new_status": new_status,
                 }
@@ -262,7 +262,7 @@ def update_story_status(story_file, story_id, new_status, reason=None, force=Fal
             if reason:
                 data["blocked_reason"] = reason
         else:
-            # leaving BLOCKED — drop blocked_reason if it exists
+            # leaving BLOCKED -- drop blocked_reason if it exists
             if "blocked_reason" in data:
                 try:
                     del data["blocked_reason"]

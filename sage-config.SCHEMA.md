@@ -3,7 +3,7 @@
 Reference for every field in a project's `sage-config.yaml`.
 
 This file is the **team/paths** config. It does NOT contain HOW-to instructions
-for any agent — those live in `<project_root>/.sage/sage-<agent>-config.yaml`.
+for any agent -- those live in `<project_root>/.sage/sage-<agent>-config.yaml`.
 
 ---
 
@@ -77,8 +77,8 @@ team:
 Each agent entry:
 
 ```yaml
-- name: "ProductOwner"           # str — used in Agent tool, must match AGENT_SLUGS in loader
-  file: "agents/product-owner.md" # str — path relative to sage-feature-team root
+- name: "ProductOwner"           # str -- used in Agent tool, must match AGENT_SLUGS in loader
+  file: "agents/product-owner.md" # str -- path relative to sage-feature-team root
 ```
 
 Recognized agent names (mapped to `.sage/` config files by `_tools/load_agents.py`):
@@ -97,12 +97,12 @@ Recognized agent names (mapped to `.sage/` config files by `_tools/load_agents.p
 ```yaml
 paths:
   output_dir: "_output"          # specs, progress files, anything Skill writes
-  sage_dir: ".sage"              # OPTIONAL — see "Locating .sage/" below
+  sage_dir: ".sage"              # OPTIONAL -- see "Locating .sage/" below
 ```
 
 | Field | Required | Default | Purpose |
 |---|---|---|---|
-| `output_dir` | yes | — | Where the Skill writes specs and progress files (relative to project root) |
+| `output_dir` | yes | -- | Where the Skill writes specs and progress files (relative to project root) |
 | `sage_dir` | no | `<absolute_root_dir>/.sage` | Where the loader looks for per-agent instruction configs |
 
 ### Locating `.sage/`
@@ -113,8 +113,8 @@ The loader searches in this order:
 3. `<root_dir>/.sage`
 4. `./.sage` (cwd fallback)
 
-Most projects don't need to set `sage_dir`. The default — a `.sage/` directory
-in the project root — is what `setup_project.py` scaffolds.
+Most projects don't need to set `sage_dir`. The default -- a `.sage/` directory
+in the project root -- is what `setup_project.py` scaffolds.
 
 ---
 
@@ -124,23 +124,23 @@ Cycle and timeout bounds the Skill enforces while routing work.
 
 ```yaml
 limits:
-  max_cycles: 5                  # max Developer↔Tester rounds PER STORY before escalation
+  max_cycles: 5                  # max Developer<->Tester rounds PER STORY before escalation
   max_parallel_workers: 4        # cap on concurrently-spawned worker agents (parallel scheduler)
   global_timeout_seconds: 3600   # wall-clock kill switch for the whole feature run (1 hour)
-  timeout_ack_initial: 30        # seconds — initial ACK check
-  timeout_ack_remind: 45         # seconds — reminder if no ACK
-  timeout_ack_escalate: 60       # seconds — escalate if still no ACK
-  timeout_work_hard: 480         # seconds — hard timeout per agent's work step (8 min)
-  timeout_deadlock_detection: 600 # seconds — overall workflow stall detection
-  timeout_test_hang: 30          # seconds — Tester escalates if test log silent this long
+  timeout_ack_initial: 30        # seconds -- initial ACK check
+  timeout_ack_remind: 45         # seconds -- reminder if no ACK
+  timeout_ack_escalate: 60       # seconds -- escalate if still no ACK
+  timeout_work_hard: 480         # seconds -- hard timeout per agent's work step (8 min)
+  timeout_deadlock_detection: 600 # seconds -- overall workflow stall detection
+  timeout_test_hang: 30          # seconds -- Tester escalates if test log silent this long
 ```
 
 | Field | Default | Purpose |
 |---|---|---|
-| `max_cycles` | 5 | Max Developer→Tester iterations **per story** (parallel scheduler tracks each story's counter independently) |
+| `max_cycles` | 5 | Max Developer->Tester iterations **per story** (parallel scheduler tracks each story's counter independently) |
 | `max_parallel_workers` | 4 | Maximum number of ephemeral per-story worker agents the parallel scheduler runs at once |
 | `global_timeout_seconds` | 3600 | Hard wall-clock cap on a full-mode feature run after Phase 1 (PO) approval. Scheduler escalates remaining stories when hit |
-| `timeout_ack_initial` | 30 | First check for ACK (no action — just observe) |
+| `timeout_ack_initial` | 30 | First check for ACK (no action -- just observe) |
 | `timeout_ack_remind` | 45 | Send a reminder if no ACK by now |
 | `timeout_ack_escalate` | 60 | Escalate if no ACK by now |
 | `timeout_work_hard` | 480 | Hard ceiling on a single work step |

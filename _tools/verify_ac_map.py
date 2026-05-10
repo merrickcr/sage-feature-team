@@ -4,7 +4,7 @@ Verify a story's AC implementation map sidecar (the artifact the Developer
 writes to prove every AC is wired into production code).
 
 Sidecar path:  _output/FEATURE_STORIES_<feature>/STORY-N.implementation.md
-Sidecar shape (Markdown — written by Developer at the end of every cycle):
+Sidecar shape (Markdown -- written by Developer at the end of every cycle):
 
     # STORY-N Implementation Map
 
@@ -76,7 +76,7 @@ BANNED_PATTERNS = [
 # Heading like: "## AC1" or "## AC1 (anything)" or "## AC1: anything"
 AC_HEADING_RE = re.compile(r"^##\s+(AC\d+)\b", re.MULTILINE)
 
-# A "looks like a file path" line under "Implemented in:" — at least one slash
+# A "looks like a file path" line under "Implemented in:" -- at least one slash
 # or a known source-file extension. Generous on purpose; the goal is to catch
 # empty sections, not to validate the path actually exists.
 PATH_LINE_RE = re.compile(

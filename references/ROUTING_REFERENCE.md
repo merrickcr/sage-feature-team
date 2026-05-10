@@ -105,16 +105,16 @@ START
 
 ```
 CYCLE 1/5
-├─ Run full tests -> Failures detected
-├─ Route to Developer
-├─ Run targeted tests -> Pass
-├─ Run full regression -> Some failures
-│
++- Run full tests -> Failures detected
++- Route to Developer
++- Run targeted tests -> Pass
++- Run full regression -> Some failures
+|
 CYCLE 2/5
-├─ Route to Developer
-├─ Run targeted tests -> Pass
-├─ Run full regression -> All pass!
-│
++- Route to Developer
++- Run targeted tests -> Pass
++- Run full regression -> All pass!
+|
 SUCCESS - Complete
 ```
 
@@ -194,8 +194,8 @@ Completed: [pending]
 ---
 
 **See Also:**
-- ../HANDBOOK.md — Complete protocol details
-- ../.claude/skills/sage-feature-team/SKILL.md — Skill/Team Lead role
+- ../HANDBOOK.md -- Complete protocol details
+- ../.claude/skills/sage-feature-team/SKILL.md -- Skill/Team Lead role
 
 ---
 

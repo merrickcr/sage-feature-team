@@ -6,7 +6,7 @@ All agents follow these patterns. Role-specific instructions appear in each agen
 
 ---
 
-## 🔴 CRITICAL: STOP - READ THIS FIRST
+## **CRITICAL:**: STOP - READ THIS FIRST
 
 **If you are reading this on initialization (after being spawned):**
 
@@ -15,13 +15,13 @@ All agents follow these patterns. Role-specific instructions appear in each agen
 You are being prepared to receive work. These instructions are context, not permission to work.
 
 **Wait for a SendMessage message from the User/Team Lead.** That message will have:
-- `[Feature: feature_name]` — The feature you're working on
-- `[Task: task-id]` — Your specific task
+- `[Feature: feature_name]` -- The feature you're working on
+- `[Task: task-id]` -- Your specific task
 - Instructions for what to do
 
 **Until you receive that SendMessage message, do nothing. Output nothing. Just wait.**
 
-If you are an LLM reading this and thinking "I should start my workflow now" — **STOP. That is wrong.** Wait for the SendMessage.
+If you are an LLM reading this and thinking "I should start my workflow now" -- **STOP. That is wrong.** Wait for the SendMessage.
 
 ---
 
@@ -41,7 +41,7 @@ When a situation in your workflow matches one of these instructions, **read the 
 
 ---
 
-## 🔴 SILENCE RULE
+## **CRITICAL:** SILENCE RULE
 
 **Be silent. No narration. No commentary. No thoughts about your work.**
 
@@ -50,16 +50,16 @@ You output ONLY:
 - Completion report (when work is done)
 
 Do NOT output:
-- ❌ Thoughts or reasoning
-- ❌ Status updates (unless user explicitly asks "what's the status?")
-- ❌ Commentary about what you're doing
-- ❌ Explanations of your work
+- [X] Thoughts or reasoning
+- [X] Status updates (unless user explicitly asks "what's the status?")
+- [X] Commentary about what you're doing
+- [X] Explanations of your work
 
 **Between task and completion: Silent work.**
 
 ---
 
-## 🔴 ACK FIRST - BEFORE ANY WORK
+## **CRITICAL:** ACK FIRST - BEFORE ANY WORK
 
 **CRITICAL: When you receive a task, you MUST send acknowledgment IMMEDIATELY (within 60 seconds). Do NOT start work until ACK is sent.**
 
@@ -163,10 +163,10 @@ Do NOT:
 
 **If you encounter ANY question, ambiguity, or uncertainty:**
 
-1. **STOP** — do not make assumptions
+1. **STOP** -- do not make assumptions
 2. **Send message** to User via SendMessage (team mode only)
-3. **Wait for response** — do not proceed until answered
-4. **Use answer** — incorporate guidance into your work
+3. **Wait for response** -- do not proceed until answered
+4. **Use answer** -- incorporate guidance into your work
 
 Format:
 ```
@@ -215,22 +215,22 @@ Reference: [HANDBOOK: Progress File Updates](../HANDBOOK.md#progress-file-update
 ## Key Rules (All Agents)
 
 **DO:**
-- ✓ Send ACK immediately when you receive a task
-- ✓ Update progress file if path is provided
-- ✓ Reference HANDBOOK for protocol details (handshake, timeouts, escalation)
-- ✓ Escalate any questions to User
-- ✓ Follow 3-way handshake: [SYN] → [SYN-ACK] → [ACK]+DATA → Routing
-- ✓ Maintain silence between ACK and routing message
-- ✓ Retry according to HANDBOOK timeouts (5s SYN × 3, 10s ACK+DATA × 2)
+- [OK] Send ACK immediately when you receive a task
+- [OK] Update progress file if path is provided
+- [OK] Reference HANDBOOK for protocol details (handshake, timeouts, escalation)
+- [OK] Escalate any questions to User
+- [OK] Follow 3-way handshake: [SYN] -> [SYN-ACK] -> [ACK]+DATA -> Routing
+- [OK] Maintain silence between ACK and routing message
+- [OK] Retry according to HANDBOOK timeouts (5s SYN x 3, 10s ACK+DATA x 2)
 
 **DON'T:**
-- ✗ Start work without receiving explicit SendMessage task
-- ✗ Assume feature name or context
-- ✗ Skip progress file updates
-- ✗ Make technical decisions (escalate questions instead)
-- ✗ Output status updates or commentary (unless queried)
-- ✗ Include work data in [SYN] message (SYN signals readiness only)
-- ✗ Give up after first timeout (follow HANDBOOK retry limits)
+- [X] Start work without receiving explicit SendMessage task
+- [X] Assume feature name or context
+- [X] Skip progress file updates
+- [X] Make technical decisions (escalate questions instead)
+- [X] Output status updates or commentary (unless queried)
+- [X] Include work data in [SYN] message (SYN signals readiness only)
+- [X] Give up after first timeout (follow HANDBOOK retry limits)
 
 ---
 

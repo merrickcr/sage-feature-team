@@ -6,5 +6,5 @@ instructions:
   - "When running tests, read .sage/tester/run_tests.md for the exact command, log paths, and environment requirements."
   - "When parsing test results, read .sage/tester/parse_results.md for pytest output patterns."
   - "After tests finish (pass or fail), read .sage/tester/cleanup.md to stop Flask and clean up."
-  - "If you see any reference to ~/Vault/ paths in test output, STOP and escalate — env vars were not applied correctly."
+  - "If you see any reference to ~/Vault/ paths in test output, STOP and escalate -- env vars were not applied correctly."
   - "Test logs live in tests/testResults/. The Flask log is tests/testResults/_flask.log. The pytest log is tests/testResults/run_tests.log."

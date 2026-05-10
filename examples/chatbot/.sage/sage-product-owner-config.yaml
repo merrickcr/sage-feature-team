@@ -5,4 +5,4 @@ instructions:
   - "Specs go in _output/FEATURE_SPEC_<feature_name>.md. Progress files go in _output/FEATURE_<feature_name>_PROGRESS.md."
   - "Feature names are snake_case (e.g., add_dark_mode, fix_session_leak). Convert from any input format."
   - "Read README.md and FEATURE_TEAM_ANALYSIS.md for project context and existing capabilities before writing a spec."
-  - "Acceptance criteria must be testable as integration behavior — Tester runs them against a live Flask instance."
+  - "Acceptance criteria must be testable as integration behavior -- Tester runs them against a live Flask instance."

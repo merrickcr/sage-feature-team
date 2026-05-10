@@ -1,7 +1,7 @@
 # Examples
 
 Reference `.sage/` directories for real projects. Use them as starting points
-when setting up Sage in a new project — copy the structure, edit the
+when setting up Sage in a new project -- copy the structure, edit the
 instructions to point at your own docs.
 
 ## chatbot/
@@ -9,10 +9,10 @@ instructions to point at your own docs.
 The Python + Flask + pytest chatbot at `~/claudeProjects/chatbot/`. Shows how
 to wire each agent to project-specific guidance:
 
-- `sage-tester-config.yaml` — how to run pytest with Flask in test mode
-- `sage-test-creator-config.yaml` — pytest conventions and fixtures
-- `sage-developer-config.yaml` — module boundaries (sage/chat, sage/llm, sage/memory, sage/web)
-- `sage-product-owner-config.yaml` — spec format and locations
+- `sage-tester-config.yaml` -- how to run pytest with Flask in test mode
+- `sage-test-creator-config.yaml` -- pytest conventions and fixtures
+- `sage-developer-config.yaml` -- module boundaries (sage/chat, sage/llm, sage/memory, sage/web)
+- `sage-product-owner-config.yaml` -- spec format and locations
 
 To actually use this for chatbot, the chatbot project would copy
 `examples/chatbot/.sage/` to `~/claudeProjects/chatbot/.sage/` and Sage would

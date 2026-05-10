@@ -27,15 +27,15 @@
 | **BLOCKER** | `none` or brief reason (e.g., `MISSING_SCHEMA`, `BLOCKED_BY_APPROVAL`) | Any external blocker |
 
 **STATUS Values:**
-- `ACKNOWLEDGED` — Received task, starting work (transient, lasts seconds)
-- `COMPLETE` — Work is done, results in progress file, ready for routing
-- `ESCALATION` — Blocked by question, ambiguity, or external dependency (see BLOCKER reason)
+- `ACKNOWLEDGED` -- Received task, starting work (transient, lasts seconds)
+- `COMPLETE` -- Work is done, results in progress file, ready for routing
+- `ESCALATION` -- Blocked by question, ambiguity, or external dependency (see BLOCKER reason)
 
 ---
 
 ## Examples
 
-### Skill → Developer: Task Assignment with Cycle Summary
+### Skill -> Developer: Task Assignment with Cycle Summary
 ```
 @User: [Feature: auth_system] Fix failing tests. (Cycle 2/5)
 
@@ -51,7 +51,7 @@ Test file: tests/test_auth_system.py
 --- STATUS: TASK_ASSIGNED | READY: N/A | BLOCKER: none
 ```
 
-### Agent → Skill: Acknowledgment
+### Agent -> Skill: Acknowledgment
 ```
 @User: [Feature: auth_system] Acknowledged. Starting now.
 
@@ -60,7 +60,7 @@ Test file: tests/test_auth_system.py
 --- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none
 ```
 
-### Agent → Skill: Work Complete
+### Agent -> Skill: Work Complete
 ```
 @User: [Feature: auth_system] Code complete.
 
@@ -75,7 +75,7 @@ Files: sage/auth/login.py, sage/auth/validators.py
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none
 ```
 
-### Agent → Skill: Escalation (Blocked by External Dependency)
+### Agent -> Skill: Escalation (Blocked by External Dependency)
 ```
 @User: [Feature: auth_system] Cannot proceed.
 

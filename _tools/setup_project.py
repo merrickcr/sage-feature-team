@@ -4,7 +4,7 @@ Installer for Sage Feature Team into a project.
 
 Run from the source sage-feature-team checkout. Installs everything a project
 needs into its `<project>/.sage/` directory plus `<project>/.claude/skills/`.
-After install, the project is self-contained — no dependency on the source
+After install, the project is self-contained -- no dependency on the source
 checkout.
 
 What it copies (always overwritten on re-run):
@@ -195,7 +195,7 @@ paths:
   # sage_dir: ".sage"
 
 limits:
-  max_cycles: 5                # per-story dev↔test cycle cap
+  max_cycles: 5                # per-story dev<->test cycle cap
   max_parallel_workers: 4      # concurrent ephemeral worker cap (parallel scheduler)
   global_timeout_seconds: 3600 # wall-clock kill switch for full-mode feature runs
 """
@@ -211,7 +211,7 @@ def render_agent_skeleton(slug):
 # Examples of good instructions:
 #   - "When running tests, follow docs/run_tests.md exactly."
 #   - "Read docs/coding_conventions.md before writing any code."
-#   - "Test files go in tests/<area>/test_<feature>.py — never anywhere else."
+#   - "Test files go in tests/<area>/test_<feature>.py -- never anywhere else."
 #   - "Specs use the template in docs/spec_template.md."
 #
 # Keep instructions short and concrete. Point at files for detail.
@@ -338,7 +338,7 @@ def main():
     source_root = Path(__file__).parent.parent.resolve()
 
     print("=" * 70)
-    print("Sage Feature Team — Project Installer")
+    print("Sage Feature Team -- Project Installer")
     print("=" * 70)
     print(f"Source: {source_root}")
     print()
@@ -428,15 +428,15 @@ def main():
     print("=" * 70)
     print()
     print("Next steps:")
-    print(f"  1. Edit each {sage_dir.name}/sage-*-config.yaml — fill in `instructions:`")
+    print(f"  1. Edit each {sage_dir.name}/sage-*-config.yaml -- fill in `instructions:`")
     print(f"     with project-specific guidance (point at your project's docs).")
     print(f"  2. From the project root, run one of:")
-    print(f"       /sage-feature-team \"Your feature\"   — full team workflow")
-    print(f"       /sage-dev-test                       — ad-hoc test/fix cycle (Developer + Tester)")
-    print(f"       /sage-po \"Your feature\"             — single agent: create spec + stories")
-    print(f"       /sage-test-creator [STORY-N]         — single agent: write tests for a story")
-    print(f"       /sage-developer    [STORY-N]         — single agent: implement code for a story")
-    print(f"       /sage-tester       [STORY-N]         — single agent: validate a story's tests")
+    print(f"       /sage-feature-team \"Your feature\"   -- full team workflow")
+    print(f"       /sage-dev-test                       -- ad-hoc test/fix cycle (Developer + Tester)")
+    print(f"       /sage-po \"Your feature\"             -- single agent: create spec + stories")
+    print(f"       /sage-test-creator [STORY-N]         -- single agent: write tests for a story")
+    print(f"       /sage-developer    [STORY-N]         -- single agent: implement code for a story")
+    print(f"       /sage-tester       [STORY-N]         -- single agent: validate a story's tests")
     return 0
 
 

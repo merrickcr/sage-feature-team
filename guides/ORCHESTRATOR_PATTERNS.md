@@ -117,7 +117,7 @@ Return: SUCCESS or ESCALATION
 ```
 
 **Key Rules:**
-- Max cycles definition: "Allow up to N full Developer→Tester rounds"
+- Max cycles definition: "Allow up to N full Developer->Tester rounds"
 - Example: max_cycles=5 means Cycle 1, 2, 3, 4, 5 allowed (no Cycle 6)
 - Hard stop: After Cycle N FAILED and cycle_count == max_cycles, escalate immediately
 
@@ -307,12 +307,12 @@ Next steps:
 
 | Pattern | sage-feature-team | sage-dev-test | Notes |
 |---------|-------------------|---------------|-------|
-| 1: Graduated Timeout | ✓ (all agents) | ✓ (Dev+Tester) | Same algorithm |
-| 2: Work Completion | ✓ (all phases) | ✓ (Dev+Tester) | Same algorithm |
-| 3: Cycle Loop | ✓ (Dev/Tester) | ✓ (Dev/Tester) | Identical algorithm |
-| 4: SendMessage Format | ✓ (all messages) | ✓ (all messages) | Identical format |
-| 5: Escalation Handling | ✓ (timeouts) | ✓ (timeouts) | Identical templates |
-| 6: Final Reporting | ✓ (completion) | ✓ (completion) | Mode-specific, same pattern |
+| 1: Graduated Timeout | [OK] (all agents) | [OK] (Dev+Tester) | Same algorithm |
+| 2: Work Completion | [OK] (all phases) | [OK] (Dev+Tester) | Same algorithm |
+| 3: Cycle Loop | [OK] (Dev/Tester) | [OK] (Dev/Tester) | Identical algorithm |
+| 4: SendMessage Format | [OK] (all messages) | [OK] (all messages) | Identical format |
+| 5: Escalation Handling | [OK] (timeouts) | [OK] (timeouts) | Identical templates |
+| 6: Final Reporting | [OK] (completion) | [OK] (completion) | Mode-specific, same pattern |
 
 **Result:** Both skills reference these shared patterns instead of duplicating them in SKILL.md.
 

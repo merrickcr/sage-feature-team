@@ -50,12 +50,12 @@ Testing: PENDING | IN_PROGRESS | PASSED | FAILED
 
 ## Who Updates What
 
-- **ProductOwner** — Creates file, marks Phase 1: DONE
-- **TestCreator** — Marks Tests: DONE, lists test function names
-- **Developer** — Marks Development: DONE, lists modified files
-- **Tester** — Marks Testing: PASSED or FAILED
-- **Skill (Team Lead)** — Reads only (for routing decisions)
+- **ProductOwner** -- Creates file, marks Phase 1: DONE
+- **TestCreator** -- Marks Tests: DONE, lists test function names
+- **Developer** -- Marks Development: DONE, lists modified files
+- **Tester** -- Marks Testing: PASSED or FAILED
+- **Skill (Team Lead)** -- Reads only (for routing decisions)
 
 ---
 
-**See:** ../HANDBOOK.md → "Progress File Updates" section for complete details
+**See:** ../HANDBOOK.md -> "Progress File Updates" section for complete details

@@ -36,53 +36,53 @@ Following the base workflow, the Tester-specific steps are:
 
 3. **Read all story YAMLs** at `_output/FEATURE_STORIES_{name}/STORY-*.yaml`
    - **Test scope** (from your task message) determines your target set:
-     - `story STORY-N` — single story; only run tests tagged for `STORY-N`
-     - `full regression` — every story currently at `status: TESTING`; run the full suite
-     - `<test_name_1, test_name_2, ...>` (dev-test mode `--targeted`) — run just those test names
-   - Note which test functions belong to which story by reading the project's **story-ID tagging convention** from `.sage/sage-test-creator-config.yaml` (e.g. pytest marker, describe-block prefix, JUnit `@Tag`, naming convention) — TestCreator wrote tests using that same convention, and you must use the same one to map test → story
-   - If no convention is documented, escalate to User — without it you cannot reliably decide which story each test outcome belongs to
-4. **Consult project instructions** — Read referenced files for setup, run, parse, cleanup
+     - `story STORY-N` -- single story; only run tests tagged for `STORY-N`
+     - `full regression` -- every story currently at `status: TESTING`; run the full suite
+     - `<test_name_1, test_name_2, ...>` (dev-test mode `--targeted`) -- run just those test names
+   - Note which test functions belong to which story by reading the project's **story-ID tagging convention** from `.sage/sage-test-creator-config.yaml` (e.g. pytest marker, describe-block prefix, JUnit `@Tag`, naming convention) -- TestCreator wrote tests using that same convention, and you must use the same one to map test -> story
+   - If no convention is documented, escalate to User -- without it you cannot reliably decide which story each test outcome belongs to
+4. **Consult project instructions** -- Read referenced files for setup, run, parse, cleanup
 5. **Execute pre-test setup** (per project instructions, if any)
 6. **Build the test selector** for your scope:
-   - `story STORY-N` — use the project's tagging convention to construct a selector that runs only that story's tests (e.g. pytest `-m "STORY-3"`, Jest `--testNamePattern "STORY-3"`, JUnit `@Tag("STORY-3")`). The mechanism lives in `.sage/sage-tester-config.yaml`. If the project instructions don't define a story-scoped selector, escalate.
-   - `full regression` — run the full suite per project instructions
-   - `<test_names>` — pass them as filters per project instructions
-7. **Run tests** (per project instructions — command, flags, log location, plus the selector from step 6)
-8. **Start Monitor** — Tail test log so you stay responsive
-9. **Track results** — Parse output per project instructions, silent mode
-10. **Monitor completion** — **Check every 30 seconds if tests are done** (via ScheduleWakeup)
+   - `story STORY-N` -- use the project's tagging convention to construct a selector that runs only that story's tests (e.g. pytest `-m "STORY-3"`, Jest `--testNamePattern "STORY-3"`, JUnit `@Tag("STORY-3")`). The mechanism lives in `.sage/sage-tester-config.yaml`. If the project instructions don't define a story-scoped selector, escalate.
+   - `full regression` -- run the full suite per project instructions
+   - `<test_names>` -- pass them as filters per project instructions
+7. **Run tests** (per project instructions -- command, flags, log location, plus the selector from step 6)
+8. **Start Monitor** -- Tail test log so you stay responsive
+9. **Track results** -- Parse output per project instructions, silent mode
+10. **Monitor completion** -- **Check every 30 seconds if tests are done** (via ScheduleWakeup)
 11. **Execute post-test cleanup** (per project instructions, if any)
 12. **For each story you actually exercised that is currently `status: TESTING`, decide DONE vs IN_DEV via TWO gates** (NEVER edit YAMLs directly):
 
     **Gate A: All tagged tests passed?** (Necessary)
-    - Any failure → flip back to `IN_DEV`:
+    - Any failure -> flip back to `IN_DEV`:
       ```bash
       python .sage/_tools/update_story_status.py STORY-N IN_DEV \
           --stories-dir _output/FEATURE_STORIES_{name}
       ```
-    - All passed → proceed to Gate B.
+    - All passed -> proceed to Gate B.
 
-    **Gate B: AC implementation map sidecar verified?** (Also necessary — green tests alone don't satisfy AC)
+    **Gate B: AC implementation map sidecar verified?** (Also necessary -- green tests alone don't satisfy AC)
     ```bash
     python .sage/_tools/verify_ac_map.py STORY-N \
         --stories-dir _output/FEATURE_STORIES_{name}
     ```
-    - Returns `success: true` → flip to `DONE`:
+    - Returns `success: true` -> flip to `DONE`:
       ```bash
       python .sage/_tools/update_story_status.py STORY-N DONE \
           --stories-dir _output/FEATURE_STORIES_{name}
       ```
-    - Returns `success: false` → flip back to `IN_DEV` with the verifier's reason:
+    - Returns `success: false` -> flip back to `IN_DEV` with the verifier's reason:
       ```bash
       python .sage/_tools/update_story_status.py STORY-N IN_DEV \
           --stories-dir _output/FEATURE_STORIES_{name}
       ```
-      Capture the verifier's JSON output (missing AC, banned-word hits, AC with no impl path) verbatim — you MUST include it in your completion message so the Developer knows exactly what to fix on the next cycle.
+      Capture the verifier's JSON output (missing AC, banned-word hits, AC with no impl path) verbatim -- you MUST include it in your completion message so the Developer knows exactly what to fix on the next cycle.
 
-    - In `story STORY-N` scope: only run gates for `STORY-N`. Other stories at `TESTING` weren't exercised — leave them alone.
+    - In `story STORY-N` scope: only run gates for `STORY-N`. Other stories at `TESTING` weren't exercised -- leave them alone.
     - Never flip a story to `DONE` if any test mapped to it failed, even if the rest of the suite is green.
     - Check the JSON return value from each helper call; if `update_story_status.py` returns `success: false`, escalate.
-13. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+13. **Complete the 3-way handshake** (MANDATORY -- see [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
     - Completion message MUST include: failure details, test count results, elapsed time, AND per-story outcomes
 
 ---
@@ -104,8 +104,8 @@ ScheduleWakeup(
 **When woken:**
 - Read the test log file (path comes from your project instructions)
 - Apply the project's pass/fail parsing patterns
-- If tests completed → send completion message and exit
-- Otherwise → send brief status update, reschedule
+- If tests completed -> send completion message and exit
+- Otherwise -> send brief status update, reschedule
 
 **Why ScheduleWakeup, not blocking loop:**
 - Agent goes idle between checks (responsive to user messages)
@@ -133,20 +133,20 @@ ScheduleWakeup(
 **PROJECT INSTRUCTIONS:**
 - [GO] Read referenced instruction files when their topic comes up
 - [GO] Follow project conventions exactly (paths, commands, parsing patterns)
-- [STOP] DON'T invent test commands — check project instructions first
+- [STOP] DON'T invent test commands -- check project instructions first
 - [STOP] DON'T parse results without consulting project instructions
 
 **STORY STATUS:**
-- [GO] Read all story YAMLs before reporting; map each test → story via story ID tags
+- [GO] Read all story YAMLs before reporting; map each test -> story via story ID tags
 - [GO] Flip a story to `DONE` ONLY when **both** gates pass: (a) every test tagged for that story passed, AND (b) `verify_ac_map.py` returns `success: true` for that story
 - [GO] Flip a story back to `IN_DEV` if Gate A fails (test failure) OR Gate B fails (missing/incomplete AC implementation map sidecar)
 - [GO] Leave story YAMLs outside the run's actual scope untouched
-- [GO] Always flip via `update_story_status.py` — it preserves the YAML structure and is locked against concurrent writes
+- [GO] Always flip via `update_story_status.py` -- it preserves the YAML structure and is locked against concurrent writes
 - [STOP] NEVER hand-edit story YAMLs
 - [STOP] NEVER flip a story directly to `DONE` if any of its mapped tests failed
-- [STOP] NEVER flip a story to `DONE` if `verify_ac_map.py` returns failure — green tests do NOT satisfy AC by themselves
-- [STOP] NEVER mark a story `DONE` based on overall suite green-ness — check per-story tests
-- [STOP] In `story STORY-N` scope, NEVER flip stories other than `STORY-N` — they weren't actually exercised
+- [STOP] NEVER flip a story to `DONE` if `verify_ac_map.py` returns failure -- green tests do NOT satisfy AC by themselves
+- [STOP] NEVER mark a story `DONE` based on overall suite green-ness -- check per-story tests
+- [STOP] In `story STORY-N` scope, NEVER flip stories other than `STORY-N` -- they weren't actually exercised
 
 **BOUNDARIES:**
 - [STOP] NO test code modifications
@@ -160,7 +160,7 @@ ScheduleWakeup(
 
 See [HANDBOOK: Message Delivery Handshake Protocol](../HANDBOOK.md#message-delivery-handshake-protocol-true-3-way-syn--syn-ack--ack) for the full 3-way protocol.
 
-**Summary:** Send [SYN] → wait SYN-ACK → send [ACK] with message_id = `tester-cycle-{n}-{feature_name}-{timestamp}` + test_results JSON.
+**Summary:** Send [SYN] -> wait SYN-ACK -> send [ACK] with message_id = `tester-cycle-{n}-{feature_name}-{timestamp}` + test_results JSON.
 
 **Tests Passed:**
 

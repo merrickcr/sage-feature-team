@@ -6,7 +6,7 @@ when_to_use: When you want to create tests for a story that has been spec'd but 
 
 # Sage TestCreator Skill (inline)
 
-You ARE the TestCreator for this invocation. Run the role inline in this conversation — no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
+You ARE the TestCreator for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
 
 ---
 
@@ -20,8 +20,8 @@ Usage:
 ```
 
 Compute:
-- **explicit_story** — first positional arg matching `STORY-\d+`, else null
-- **feature_name** — `--feature <name>` if given, else auto-detect (Step 3)
+- **explicit_story** -- first positional arg matching `STORY-\d+`, else null
+- **feature_name** -- `--feature <name>` if given, else auto-detect (Step 3)
 
 ---
 
@@ -33,12 +33,12 @@ python _tools/load_agents.py full
 
 (Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
 
-From the JSON, extract `agents.TestCreator`. **Read this rendered prompt as your role context** — especially the "Project-Specific Instructions" section (test framework, file location, naming convention, story-ID tagging convention).
+From the JSON, extract `agents.TestCreator`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (test framework, file location, naming convention, story-ID tagging convention).
 
-**Skip these parts of the rendered prompt** — only apply when running as a spawned worker:
+**Skip these parts of the rendered prompt** -- only apply when running as a spawned worker:
 - ACK message / `STATUS: ACKNOWLEDGED`
 - Handshake `[SYN]` / `[SYN-ACK]` / `[ACK]` flow
-- Any `SendMessage(to="User", ...)` calls — talk to the user with normal text instead
+- Any `SendMessage(to="User", ...)` calls -- talk to the user with normal text instead
 - Task-Waiting Rule (the skill invocation IS the task)
 - Silence Rule (you should communicate normally)
 
@@ -51,9 +51,9 @@ If `success` is false, surface the loader's `error` and stop.
 If `feature_name` was passed via `--feature`, use it directly. Otherwise:
 
 1. List directories matching `<output_dir>/FEATURE_STORIES_*/` (output_dir from sage-config.yaml; default `_output`)
-2. **Zero matches** → tell the user: "No FEATURE_STORIES_<feature>/ directory found in <output_dir>. Run /sage-po first to create a spec and stories." Stop.
-3. **Exactly one match** → use it; extract `feature_name` from the directory name
-4. **Multiple matches** → show the list to the user and ask which feature to work on. Wait for their answer before continuing.
+2. **Zero matches** -> tell the user: "No FEATURE_STORIES_<feature>/ directory found in <output_dir>. Run /sage-po first to create a spec and stories." Stop.
+3. **Exactly one match** -> use it; extract `feature_name` from the directory name
+4. **Multiple matches** -> show the list to the user and ask which feature to work on. Wait for their answer before continuing.
 
 Compute:
 - `stories_dir = <output_dir>/FEATURE_STORIES_<feature_name>/`
@@ -83,7 +83,7 @@ Set `target_story` to the chosen story ID.
 
 Following the TestCreator role file (already rendered in Step 2):
 
-1. **Read project instructions** for test framework, file location, naming, and **story-ID tagging convention**. If the project instructions don't specify a tagging convention, ask the user before proceeding (don't pick one yourself — Tester needs to use the same one).
+1. **Read project instructions** for test framework, file location, naming, and **story-ID tagging convention**. If the project instructions don't specify a tagging convention, ask the user before proceeding (don't pick one yourself -- Tester needs to use the same one).
 2. **Read `target_story`'s YAML** to get its `acceptance_criteria:` block (the contract for the tests you write).
 3. **Flip `target_story` to `CREATE_TESTS`** via the helper script:
    ```bash
@@ -98,7 +98,7 @@ Following the TestCreator role file (already rendered in Step 2):
    ```
 6. **Report to the user** as plain text:
    ```
-   Story: <target_story> → IN_DEV
+   Story: <target_story> -> IN_DEV
    AC covered: AC1, AC2, ...
    Tests written: <count>
    Test file(s):
@@ -115,9 +115,9 @@ Following the TestCreator role file (already rendered in Step 2):
 
 - Read project instruction files BEFORE writing tests
 - Follow project's test naming and location conventions exactly
-- Use the project's test framework — don't switch
+- Use the project's test framework -- don't switch
 - Test names describe behavior, not AC numbers
-- Always use `update_story_status.py` for status flips — never hand-edit story YAMLs
+- Always use `update_story_status.py` for status flips -- never hand-edit story YAMLs
 - Tag/group every test by story ID using the project convention
 - If the target story's `acceptance_criteria:` is empty, stop and ask the user
 - NO test execution, NO code implementation
@@ -129,5 +129,5 @@ Following the TestCreator role file (already rendered in Step 2):
 ## What This Skill Does NOT Do
 
 - Does not run Developer or Tester (use `/sage-developer` and `/sage-tester` next)
-- Does not loop through multiple ready stories — handles exactly one per invocation
+- Does not loop through multiple ready stories -- handles exactly one per invocation
 - Does not create a progress file
