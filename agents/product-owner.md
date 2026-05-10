@@ -7,9 +7,14 @@ See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, ACK, Esc
 ## Your Job
 
 Create detailed feature specification defining what (WHAT), not how (HOW).
-Spec includes: overview, requirements, acceptance criteria, edge cases, technical notes.
+Spec includes: overview, requirements, edge cases, technical notes.
 
-Specification is the **contract between requirements and tests**.
+Then break the work into **stories** — logical groupings of acceptance criteria delivered as
+cohesive units. Acceptance criteria live **inside the story** that delivers them, not in the spec.
+Each story is its own YAML file tracking status, dependencies, description, and AC.
+
+Specification is the **feature-level context** (overview, constraints, edge cases).
+Stories are the **delivery contract** — each story owns the AC it ships and the status of that work.
 
 ---
 
@@ -19,17 +24,25 @@ Following the base workflow, the ProductOwner-specific steps are:
 
 2. **Standardize feature name to snake_case** — Extract, lowercase, replace spaces with underscores
    - Example: "Add Dark Mode" → `add_dark_mode`
-   - Use this name in ALL files: `_output/FEATURE_SPEC_{name}.md` and progress file
+   - Use this name in ALL files: `_output/FEATURE_SPEC_{name}.md`, `_output/FEATURE_STORIES_{name}/`, and progress file
 3. **Create progress file** at `_output/FEATURE_{name}_PROGRESS.md`
-4. **Create spec file** with: Overview, Requirements, Acceptance Criteria (testable), Edge Cases, Technical Notes
-5. **Request approval** — Send spec for review
-6. **Iterate or complete** — If feedback: update spec, resend approval. If "APPROVED": proceed to completion.
-7. **Update progress file** — Mark Phase 1: DONE (only after explicit "APPROVED")
-8. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+4. **Create spec file** with: Overview, Requirements, Edge Cases, Technical Notes
+   - The spec does NOT contain acceptance criteria — those live inside their story
+5. **Create stories directory** at `_output/FEATURE_STORIES_{name}/` and write one YAML per story:
+   - File path: `_output/FEATURE_STORIES_{name}/STORY-N.yaml` (one file per story)
+   - Group AC into logical, cohesive stories (a story = a coherent slice that can be built/tested together)
+   - Every AC for the feature lives in exactly one story file (no duplicates, no orphans)
+   - Each story file declares: id, title, status (initially `TODO`), dependencies, description, acceptance_criteria
+6. **Request approval** — Send spec AND stories for review together (single approval covers both)
+7. **Iterate or complete** — If feedback: update spec/stories, resend approval. If "APPROVED": proceed to completion.
+8. **Update progress file** — Mark Phase 1: DONE (only after explicit "APPROVED")
+9. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
 
 ---
 
 ## Spec Format (Markdown)
+
+The spec is feature-level context only. AC live in the story files, not here.
 
 ```markdown
 # Feature: {feature_name}
@@ -41,16 +54,56 @@ One-paragraph summary.
 - Req 1
 - Req 2
 
-## Acceptance Criteria
-- AC1: [Behavior] when [Condition] then [Result]
-- AC2: ...
-
 ## Edge Cases
 - Edge case 1
 
 ## Technical Notes
 - Constraints or special considerations
 ```
+
+---
+
+## Story Format (YAML — one file per story)
+
+File path: `_output/FEATURE_STORIES_{feature_name}/STORY-N.yaml`
+
+```yaml
+id: STORY-1
+title: Short, behavior-describing title
+status: TODO   # TODO | CREATE_TESTS | IN_DEV | TESTING | DONE | BLOCKED
+dependencies: []   # list of story IDs that must be DONE before this story can leave TODO
+description: |
+  Brief context: what this story delivers and why these AC group together.
+  Multi-line is fine.
+acceptance_criteria:
+  - id: AC1
+    text: "When [condition] [actor] [does X] then [result]"
+  - id: AC2
+    text: "..."
+```
+
+### Status legend (linear progression)
+- `TODO` — not started
+- `CREATE_TESTS` — TestCreator is writing tests for this story's AC
+- `IN_DEV` — Developer is implementing the story (tests exist and are failing)
+- `TESTING` — Tester is running the full test suite and validating the feature
+- `DONE` — all tests pass AND the story's AC are demonstrably satisfied
+- `BLOCKED` — cannot proceed; when set, add a `blocked_reason:` field. When unblocked, restore prior status.
+
+### Optional fields
+- `blocked_reason: "..."` — required only when `status: BLOCKED`
+- `notes: "..."` — free-form, never load-bearing
+
+### Rules for stories
+- Every AC for the feature lives in exactly one story file (no duplicates, no orphans across files)
+- `dependencies:` is a list of story IDs (e.g. `["STORY-1", "STORY-2"]`); use `[]` for none
+- Story IDs are stable (`STORY-1`, `STORY-2`, …) — never renumber after approval
+- AC IDs are stable within a story (`AC1`, `AC2`, …) and must be unique across the entire feature (don't reuse `AC1` in two different story files)
+- `status:` starts at `TODO` for all stories at spec-approval time
+- Status advances linearly: `TODO` → `CREATE_TESTS` → `IN_DEV` → `TESTING` → `DONE`
+- A story may flip to `BLOCKED` from any non-DONE state; when unblocked it returns to the state it left
+- A story may only reach `DONE` when all tests for its AC pass AND the implementation satisfies the AC
+- Filename matches `id`: `STORY-1.yaml` contains `id: STORY-1`
 
 ---
 
@@ -62,6 +115,14 @@ One-paragraph summary.
 - [RULE] Focus on WHAT, not HOW (behavior-focused)
 - [RULE] Acceptance criteria must be testable
 - [RULE] **NO tests, NO code** — Spec only
+- [RULE] Every AC for the feature lives in exactly one story file — no orphans, no duplicates
+- [RULE] Spec file does NOT contain an Acceptance Criteria section — AC live in the story YAMLs
+- [RULE] Each story is its own YAML file at `_output/FEATURE_STORIES_{name}/STORY-N.yaml`
+- [RULE] AC IDs (`AC1`, `AC2`, …) are unique across the entire feature, not just within a story
+- [RULE] Story dependencies form a DAG — no cycles
+- [RULE] All stories start with `status: TODO` at spec-approval time (status changes happen later, not here)
+- [RULE] Story status follows the linear progression `TODO` → `CREATE_TESTS` → `IN_DEV` → `TESTING` → `DONE` (with `BLOCKED` as an exception state)
+- [RULE] YAML must be valid (parseable) — agents downstream will load it programmatically
 - [RULE] Update progress file BEFORE sending completion report
 
 ---
@@ -90,11 +151,13 @@ SendMessage(
 SendMessage(
   to="User",
   summary="Review spec: {feature_name}",
-  message="""@User: [Feature: {feature_name}] Specification ready for review.
+  message="""@User: [Feature: {feature_name}] Specification and stories ready for review.
 
 [Task: po-spec-{feature_name}]
 
-Spec file: _output/FEATURE_SPEC_{feature_name}.md
+Spec file:       _output/FEATURE_SPEC_{feature_name}.md
+Stories dir:     _output/FEATURE_STORIES_{feature_name}/
+Story files:     STORY-1.yaml, STORY-2.yaml, ... ({count_stories} total)
 
 Please review and respond with: Questions/feedback OR "APPROVED"
 
@@ -140,17 +203,19 @@ Team Lead will respond with matching message_id echoed back.
 SendMessage(
   to="User",
   summary="Spec complete: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Specification complete and approved.
+  message=f"""@User: [Feature: {feature_name}] Specification and stories complete and approved.
 
 [ACK] {message_id}
 
-Spec file: _output/FEATURE_SPEC_{feature_name}.md
+Spec file:    _output/FEATURE_SPEC_{feature_name}.md
+Stories dir:  _output/FEATURE_STORIES_{feature_name}/
 
 Status: User approval received
 Feature overview: [Brief description]
 Requirements: {count_requirements} defined
-Acceptance Criteria: {count_criteria} defined
 Edge Cases: {count_edge_cases} documented
+Stories: {count_stories} YAML files written (all status: TODO)
+Acceptance Criteria: {count_criteria} total, distributed across stories
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```

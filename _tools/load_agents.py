@@ -52,11 +52,16 @@ def load_config(config_path=None):
             break
         cur = cur.parent
 
+    parse_errors = []
     for c in candidates:
         try:
             return _read_yaml(c)
-        except Exception:
-            continue
+        except Exception as e:
+            parse_errors.append(f"{c}: {e}")
+
+    if parse_errors:
+        details = "\n  - ".join(parse_errors)
+        raise ValueError(f"Found candidate sage-config.yaml file(s) but failed to parse:\n  - {details}")
 
     locations = "\n  - ".join(str(p) for p in candidates) if candidates else "none"
     raise FileNotFoundError(f"sage-config.yaml not found. Searched:\n  - {locations}")

@@ -103,30 +103,68 @@ Adding a new agent? Add it here and to `team.agents.full` (and `dev_test_only` i
 
 ## setup_project.py
 
-Interactive scaffolding for a new project.
+Full installer. Copies every file the project needs into `<project>/.sage/`
+and `<project>/.claude/skills/`, then scaffolds the per-agent instruction
+configs and `sage-config.yaml`. After install the project is self-contained —
+it has its own copy of the agent files, loader, HANDBOOK, templates, guides,
+references, and skills, and does NOT depend on the source sage-feature-team
+checkout.
 
 ```bash
-cd ~/StudioProjects/Breadcrumbs
+# Interactive
 python ~/claudeProjects/sage-feature-team/_tools/setup_project.py
+
+# Non-interactive
+python ~/claudeProjects/sage-feature-team/_tools/setup_project.py \
+    --project ~/StudioProjects/Breadcrumbs \
+    --name Breadcrumbs \
+    --yes
 ```
 
-### What it does
+### What it copies (always overwrites on re-run)
 
-1. Asks for project name and absolute path
-2. Writes `<project>/sage-config.yaml` (team config — no project-specific HOW)
-3. Creates `<project>/.sage/` and writes four skeleton instruction files:
-   - `sage-product-owner-config.yaml`
-   - `sage-test-creator-config.yaml`
-   - `sage-developer-config.yaml`
-   - `sage-tester-config.yaml`
+| Source (sage-feature-team root) | Dest (`<project>/`) |
+|---|---|
+| `agents/` | `.sage/agents/` |
+| `_tools/load_agents.py` | `.sage/_tools/load_agents.py` |
+| `HANDBOOK.md` | `.sage/HANDBOOK.md` |
+| `sage-config.SCHEMA.md` | `.sage/sage-config.SCHEMA.md` |
+| `templates/` | `.sage/templates/` |
+| `guides/` | `.sage/guides/` |
+| `references/` | `.sage/references/` |
+| `.claude/skills/sage-feature-team/SKILL.md` | `.claude/skills/sage-feature-team/SKILL.md` |
+| `.claude/skills/sage-dev-test/SKILL.md` | `.claude/skills/sage-dev-test/SKILL.md` |
 
-Each skeleton has `instructions: []` and a comment block showing the format. The user fills them in to point the agents at their project's docs.
+SKILL files are rewritten on copy: paths like `_tools/load_agents.py` become
+`.sage/_tools/load_agents.py`, references like `` `HANDBOOK.md` `` become
+`` `.sage/HANDBOOK.md` ``, etc. The source SKILLs assume the
+sage-feature-team layout (which is the chatbot demo's setup); installed SKILLs
+assume the project layout.
+
+### What it scaffolds (NEVER overwrites on re-run)
+
+- `<project>/.sage/sage-product-owner-config.yaml`
+- `<project>/.sage/sage-test-creator-config.yaml`
+- `<project>/.sage/sage-developer-config.yaml`
+- `<project>/.sage/sage-tester-config.yaml`
+- `<project>/sage-config.yaml`
+
+Re-running the installer is safe: generic files refresh (so you can update an
+installed project by re-running after pulling sage-feature-team), but the
+user's per-agent instructions and team config are preserved.
 
 ### What it doesn't do
 
 - Doesn't probe the project for language/framework — that knowledge lives in the user's instruction list
 - Doesn't preflight test commands or servers — Tester does that at runtime per its instructions
 - Doesn't write or copy any project markdown — the user creates those, organized however they like
+
+### Verification
+
+After install, the wizard runs the installed loader (`<project>/.sage/_tools/load_agents.py full`)
+and prints OK if all four agents render cleanly. If verification fails, the
+install completed but something is wrong (corrupt config, missing source
+file, etc.) — exit code 2.
 
 ---
 

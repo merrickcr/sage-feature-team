@@ -34,15 +34,24 @@ SendMessage(
 
 Following the base workflow, the Tester-specific steps are:
 
-3. **Consult project instructions** — Read referenced files for setup, run, parse, cleanup
-4. **Execute pre-test setup** (per project instructions, if any)
-5. **Run tests** (per project instructions — command, flags, log location)
-6. **Start Monitor** — Tail test log so you stay responsive
-7. **Track results** — Parse output per project instructions, silent mode
-8. **Monitor completion** — **Check every 30 seconds if tests are done** (via ScheduleWakeup)
-9. **Execute post-test cleanup** (per project instructions, if any)
-10. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
-    - Completion message MUST include: failure details, test count results, elapsed time
+3. **Read all story YAMLs** at `_output/FEATURE_STORIES_{name}/STORY-*.yaml`
+   - Your target set is every story file with `status: TESTING` (these are the ones Developer just finished)
+   - Note which test functions belong to which story by reading the project's **story-ID tagging convention** from `.sage/sage-test-creator-config.yaml` (e.g. pytest marker, describe-block prefix, JUnit `@Tag`, naming convention) — TestCreator wrote tests using that same convention, and you must use the same one to map test → story
+   - If no convention is documented, escalate to User — without it you cannot reliably decide which story each test outcome belongs to
+4. **Consult project instructions** — Read referenced files for setup, run, parse, cleanup
+5. **Execute pre-test setup** (per project instructions, if any)
+6. **Run tests** (per project instructions — command, flags, log location)
+7. **Start Monitor** — Tail test log so you stay responsive
+8. **Track results** — Parse output per project instructions, silent mode
+9. **Monitor completion** — **Check every 30 seconds if tests are done** (via ScheduleWakeup)
+10. **Execute post-test cleanup** (per project instructions, if any)
+11. **Update each target story's YAML** based on per-story test outcomes by editing the `status:` field:
+    - For each story currently `status: TESTING`: if **all** of its tagged tests passed → set `status: DONE`
+    - For each story currently `status: TESTING`: if **any** of its tagged tests failed → set `status: IN_DEV` (Developer will pick it up next cycle)
+    - Never set `status: DONE` if any test mapped to it failed, even if the rest of the suite is green
+    - Change ONLY the `status:` field in each YAML — do not touch other fields. YAML must remain valid.
+12. **Complete the 3-way handshake** (MANDATORY — see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+    - Completion message MUST include: failure details, test count results, elapsed time, AND per-story outcomes
 
 ---
 
@@ -95,11 +104,20 @@ ScheduleWakeup(
 - [STOP] DON'T invent test commands — check project instructions first
 - [STOP] DON'T parse results without consulting project instructions
 
+**STORY STATUS:**
+- [GO] Read all story YAMLs before reporting; map each test → story via story ID tags
+- [GO] Flip a story to `status: DONE` only when every test tagged for that story passed
+- [GO] Flip a story back to `status: IN_DEV` if any of its tagged tests failed
+- [GO] Leave story YAMLs outside the `TESTING` set untouched
+- [GO] Change ONLY the `status:` field — preserve all other YAML content; file must remain valid YAML
+- [STOP] NEVER flip a story directly to `DONE` if any of its mapped tests failed
+- [STOP] NEVER mark a story `DONE` based on overall suite green-ness — check per-story tests
+
 **BOUNDARIES:**
 - [STOP] NO test code modifications
 - [STOP] NO source code analysis or fixes
 - [STOP] NO test file edits
-- [STOP] NO interpretation beyond pass/fail
+- [STOP] NO interpretation beyond pass/fail (story-status flips are bookkeeping, not interpretation)
 
 ---
 
@@ -123,6 +141,9 @@ Results: All {total_tests} tests passed in {elapsed_time} seconds.
 
 {json.dumps({"test_results": {"passed": total_tests, "failed": 0, "failures": []}})}
 
+Stories advanced to DONE: <STORY-1, STORY-3, ...>
+Stories still at TESTING (not in this run's target set): <STORY-N or "none">
+
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```
 
@@ -139,6 +160,9 @@ SendMessage(
 Results: {passed_count} passed, {failed_count} failed in {elapsed_time} seconds.
 
 {json.dumps({"test_results": {"passed": passed_count, "failed": failed_count, "failures": failures}})}
+
+Stories advanced to DONE (all their tests passed): <STORY-IDs or "none">
+Stories sent back to IN_DEV (had failing tests): <STORY-IDs>
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```

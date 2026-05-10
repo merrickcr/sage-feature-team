@@ -113,8 +113,30 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 | `guides/ORCHESTRATOR_PATTERNS.md` | Reusable Skill/Team Lead patterns |
 | `references/ROUTING_REFERENCE.md` | Routing decision tree |
 | `examples/chatbot/.sage/` | Reference `.sage/` configs for the chatbot project |
-| `.claude/skills/sage-feature-team/SKILL.md` | The user-facing skill (full workflow) |
-| `.claude/skills/sage-dev-test/SKILL.md` | The user-facing skill (dev-test cycles) |
+| `.claude/skills/sage-feature-team/SKILL.md` | Full team workflow (PO → TestCreator → Developer ↔ Tester) |
+| `.claude/skills/sage-dev-test/SKILL.md` | Dev/test cycles only (Developer + Tester team) |
+| `.claude/skills/sage-po/SKILL.md` | Single-agent inline: ProductOwner — create spec + stories |
+| `.claude/skills/sage-test-creator/SKILL.md` | Single-agent inline: TestCreator — write tests for the next ready story |
+| `.claude/skills/sage-developer/SKILL.md` | Single-agent inline: Developer — implement code for the next IN_DEV story |
+| `.claude/skills/sage-tester/SKILL.md` | Single-agent inline: Tester — validate tests for the next TESTING story (or `--full` regression) |
+
+---
+
+## Per-Agent Skills (Inline)
+
+In addition to the team-orchestrated skills, each agent can be invoked individually
+inline (no team, no handshake protocol — the main conversation acts as the agent):
+
+| Skill | Picks up | Override |
+|---|---|---|
+| `/sage-po "<feature description>"` | n/a — creates a new spec + stories file | `--feature <name>` to set feature_name explicitly |
+| `/sage-test-creator [STORY-N]` | Next story at `TODO` whose dependencies are all `DONE` | Pass `STORY-N` to target a specific story |
+| `/sage-developer [STORY-N]` | Next story at `IN_DEV` | Pass `STORY-N` to target a specific story |
+| `/sage-tester [STORY-N] [--full]` | Next story at `TESTING` (story-scoped tests) | `STORY-N` to target a specific story; `--full` for regression |
+
+All four also accept `--feature <feature_name>` if multiple `FEATURE_STORIES_*.md`
+files exist in `_output/`. Otherwise, the feature is auto-detected (single match)
+or the skill asks the user (multiple matches).
 
 ---
 

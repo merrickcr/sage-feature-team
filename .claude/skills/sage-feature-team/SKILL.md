@@ -40,26 +40,18 @@ The loader handles all variable substitution. You don't substitute anything your
 
 ## Step 1: Parse Input
 
-Extract from the user's invocation:
+From the user's invocation, compute these values once and reuse them throughout:
 
-**Mode:**
-- `--dev-test-only` (with optional `--full-regression` or `--targeted <test_names>`) → mode = `dev-test-only`. Skip ProductOwner and TestCreator.
-- Anything else → mode = `full`. Need a feature name.
+- **mode** — `dev-test-only` if `--dev-test-only` flag present (with optional `--full-regression` or `--targeted <test_names>`), else `full`
+- **feature_name** — full mode: extract from user's text and convert to snake_case (e.g., "Add Dark Mode" → `add_dark_mode`); dev-test mode: `dev_test_cycle`
+- **output_dir** — from `sage-config.yaml` → `paths.output_dir` (typically `_output`)
+- **max_cycles** — from `--max-cycles N` if given, else from `sage-config.yaml` → `limits.max_cycles`
+- **spec_file** — `<output_dir>/FEATURE_SPEC_<feature_name>.md`
+- **progress_file** — `<output_dir>/FEATURE_<feature_name>_PROGRESS.md`
 
-**Feature name (full mode only):**
-- Extract from user's text (e.g., "Add Dark Mode")
-- Convert to snake_case: lowercase, spaces/hyphens → underscores
-- Use this exact name in all artifact paths (spec, progress, test files)
+**`--resume <feature_name>`** continues from an existing progress file; mode comes from the progress file.
 
-**Dev-test mode:**
-- No feature name needed. Default: `dev_test_cycle`.
-- Don't ask the user for requirements — they don't exist for ad-hoc test runs.
-
-**Optional:**
-- `--max-cycles N` overrides the config's `max_cycles`
-
-**Resume:**
-- `--resume feature_name` → continue from existing progress file at `<output_dir>/FEATURE_<name>_PROGRESS.md`. Mode comes from the progress file.
+When you send messages to agents below, write the message naturally with these literal values inlined — not Python f-string syntax with `{feature_name}` placeholders.
 
 ---
 
@@ -142,6 +134,10 @@ Wait 2-3 seconds between spawns. Agents will idle until you send them a SendMess
 
 ## Step 6: Route Work
 
+**Message-building rule:** task messages pass *context only* (feature name, paths, cycle number, what failed). Don't restate behavior the agent already knows from its role file (`agents/<role>.md`). If you find yourself writing "Job: do X, Y, Z" where X/Y/Z are part of the agent's job description — drop it. The agent already knows.
+
+
+
 ### Dev-Test Mode
 
 Skip directly to **Step 7 (Cycle Loop)** with `cycle_count = 1`. The first message goes to **Developer** (never Tester first), even though tests already exist — Developer needs to know which tests are failing before fixing.
@@ -152,21 +148,15 @@ If you need to discover what's failing first, send Tester an "initial discovery"
 
 #### Phase 1 — ProductOwner
 
-```python
-SendMessage(
-  to="ProductOwner",
-  summary="Create specification",
-  message=f"""@User: [Feature: {feature_name}] Create specification document.
+Send a SendMessage to `ProductOwner` whose body includes:
+- `@User: [Feature: <feature_name>]` opener
+- `[Task: po-spec-<feature_name>]` task ID
+- The user's requirements (verbatim)
+- `Spec file: <spec_file>`
+- `Progress file: <progress_file>`
+- `Reference: HANDBOOK.md`
 
-[Task: po-spec-{feature_name}]
-
-Requirements:
-{user_requirements}
-
-Job: Create the spec at {output_dir}/FEATURE_SPEC_{feature_name}.md and the progress file at {output_dir}/FEATURE_{feature_name}_PROGRESS.md. Request user approval when done.
-
-Reference: HANDBOOK.md""")
-```
+Use the literal `feature_name`, `spec_file`, `progress_file` values from Step 1 — not placeholder syntax. The agent's role file (`agents/product-owner.md`) defines what to do with this context.
 
 Then run the **ACK + completion monitoring** described in Step 8.
 
@@ -176,21 +166,12 @@ Then run the **ACK + completion monitoring** described in Step 8.
 
 #### Phase 2 — TestCreator
 
-```python
-SendMessage(
-  to="TestCreator",
-  summary="Create tests",
-  message=f"""@User: [Feature: {feature_name}] Create integration tests.
-
-[Task: tc-tests-{feature_name}]
-
-Spec file: {output_dir}/FEATURE_SPEC_{feature_name}.md
-Progress file: {output_dir}/FEATURE_{feature_name}_PROGRESS.md
-
-Job: Write tests covering all acceptance criteria. Use the project's test conventions (location, framework, naming) — see your project instructions.
-
-Reference: HANDBOOK.md""")
-```
+Send a SendMessage to `TestCreator` whose body includes:
+- `@User: [Feature: <feature_name>]` opener
+- `[Task: tc-tests-<feature_name>]` task ID
+- `Spec file: <spec_file>` (literal path)
+- `Progress file: <progress_file>` (literal path)
+- `Reference: HANDBOOK.md`
 
 Then ACK + completion monitoring. After completion, initialize `cycle_count = 1` and proceed to Step 7.
 
@@ -215,46 +196,27 @@ WHILE cycle_count <= max_cycles:
 
 ### Developer message
 
-```python
-SendMessage(
-  to="Developer",
-  summary=f"Fix failing tests (cycle {n}/{max})",
-  message=f"""@User: [Feature: {feature_name}] Make failing tests pass. (Cycle {n}/{max})
+Send to `Developer`, body includes:
+- `@User: [Feature: <feature_name>] ... (Cycle <n>/<max>)` opener
+- `[Task: dev-cycle-<n>-<feature_name>] [Cycle: <n>/<max>]`
+- Full mode: `Spec file: <spec_file>` and `Progress: <progress_file>`. Dev-test mode: omit both.
+- `Test file: <from TestCreator's completion report>` (don't invent — use what TestCreator reported it created)
+- If cycle > 1: paste previous cycle's `TEST_FAILURE` lines verbatim
+- `Failing tests to fix:` followed by a bulleted list of test names
+- `Reference: HANDBOOK.md`
 
-[Task: dev-cycle-{n}-{feature_name}] [Cycle: {n}/{max}]
-
-Spec file:  {output_dir}/FEATURE_SPEC_{feature_name}.md  (omit in dev-test mode)
-Test file:  <from TestCreator's report, or whatever the project instructions point at>
-Progress:   {output_dir}/FEATURE_{feature_name}_PROGRESS.md  (omit in dev-test mode)
-
-[If cycle > 1, paste the previous cycle's TEST_FAILURE lines here]
-
-Failing tests to fix:
-- <name 1>
-- <name 2>
-
-Job: Fix implementation only. Do NOT run tests — Tester does that. Follow your project instructions for code conventions and file locations.
-
-Reference: HANDBOOK.md""")
-```
+The Developer's role file (`agents/developer.md`) defines what to do with this context — don't restate cycle-vs-cycle behavior in your message.
 
 ### Tester message
 
-```python
-SendMessage(
-  to="Tester",
-  summary=f"Run tests (cycle {n}/{max})",
-  message=f"""@User: [Feature: {feature_name}] Run tests and report results. (Cycle {n}/{max})
+Send to `Tester`, body includes:
+- `@User: [Feature: <feature_name>] ... (Cycle <n>/<max>)` opener
+- `[Task: tester-<n>-<feature_name>] [Cycle: <n>/<max>]`
+- `Test scope:` either `full regression` or a list of specific test names (dev-test `--targeted`)
+- Full mode: `Progress: <progress_file>`. Dev-test mode: omit.
+- `Reference: HANDBOOK.md`
 
-[Task: tester-{n}-{feature_name}] [Cycle: {n}/{max}]
-
-Test scope: <full regression, or specific test names if dev-test --targeted>
-Progress:   {output_dir}/FEATURE_{feature_name}_PROGRESS.md  (omit in dev-test mode)
-
-Job: Follow your project instructions for setup, test command, log paths, and result parsing. Report pass/fail with TEST_FAILURE lines for any failures.
-
-Reference: HANDBOOK.md""")
-```
+Tester does NOT need a test file path — it reads its own `.sage/sage-tester-config.yaml` instructions to know what to run.
 
 ### Idle = completion
 

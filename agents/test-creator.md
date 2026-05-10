@@ -32,11 +32,42 @@ SendMessage(
 
 Following the base workflow from _BASE.md:
 
-3. **Read the specification** from provided path
-4. **Consult project instructions** — Read referenced files for test structure, naming, framework
-5. **Create the test file** using project conventions (location, naming, framework)
-6. **Update progress file** — Mark Tests: DONE, list test function names
-7. **Complete the 3-way handshake** (see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+3. **Read the specification and ALL story YAMLs** from provided paths
+   - Spec: `_output/FEATURE_SPEC_{name}.md` (feature-level context — overview, edge cases, tech notes)
+   - Stories dir: `_output/FEATURE_STORIES_{name}/STORY-*.yaml` (one file per story; `acceptance_criteria` lives inside each story)
+4. **Determine target stories** — task message may name specific story IDs; otherwise, target every story whose YAML has `status: TODO` AND every entry in its `dependencies:` resolves to a story whose YAML has `status: DONE`
+5. **Flip target stories to `CREATE_TESTS`** by editing the `status:` field in each target story's YAML BEFORE writing any tests
+6. **Consult project instructions** — Read referenced files for test structure, naming, framework
+7. **Create the test file(s)** using project conventions (location, naming, framework)
+   - Cover every AC listed in each target story's `acceptance_criteria:` block
+   - Tag test functions by story ID per the project's tagging convention so downstream agents can map test → story
+8. **Flip target stories from `CREATE_TESTS` to `IN_DEV`** by editing the `status:` field once their tests exist
+9. **Update progress file** — Mark Tests: DONE, list test function names AND story IDs covered
+10. **Complete the 3-way handshake** (see [_BASE.md § Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+
+---
+
+## Story-ID Tagging Convention (Project-Specific)
+
+Every test function you create MUST be traceable back to a story ID — Tester relies on this
+mapping to decide whether each story moves to `DONE` or back to `IN_DEV`.
+
+The **mechanism** for tagging (decorator, name prefix, docstring marker, framework tag, etc.) is
+**project-specific** and lives in `.sage/sage-test-creator-config.yaml`. Examples a project might
+choose, depending on framework idioms:
+
+- **pytest:** `@pytest.mark.story("STORY-1")` markers
+- **Jest / Vitest:** `describe("STORY-1: ...", () => {...})` block titles
+- **JUnit:** `@Tag("STORY-1")` annotations
+- **Go testing:** `// story: STORY-1` comment above each test func, or a `t.Run("STORY-1/...", ...)` subtest naming scheme
+- **Plain naming convention:** `test_story1_login_with_valid_email`
+
+**Rules for the tagging mechanism, regardless of which one the project picks:**
+
+- [RULE] Look up the project's tagging convention in your project instructions (`.sage/sage-test-creator-config.yaml`) BEFORE writing the first test
+- [RULE] If the project instructions don't specify a tagging convention, **escalate to User** — do not pick one yourself; Tester needs a stable convention to parse
+- [RULE] Every test function maps to exactly one story (the one whose AC it validates); if a test legitimately covers multiple stories' AC, escalate — that's a sign the stories file should be revised
+- [RULE] The mapping must be recoverable by reading the test file alone (no external lookup table) — Tester reads the same convention to parse outcomes per story
 
 ---
 
@@ -47,9 +78,18 @@ Following the base workflow from _BASE.md:
 - [RULE] Place test files where project instructions say (don't invent paths)
 - [RULE] Use the test framework the project uses (don't switch frameworks)
 - [RULE] Test names describe behavior (not "test_ac1", but "test_login_with_valid_email")
+- [RULE] **Story YAMLs:** flip target stories `status: TODO` → `status: CREATE_TESTS` BEFORE writing tests, `status: CREATE_TESTS` → `status: IN_DEV` AFTER writing tests
+- [RULE] AC come from the story's own `acceptance_criteria:` list — NOT from the spec (the spec no longer has an AC section)
+- [RULE] Only target stories whose dependencies all resolve to `status: DONE` (skip the rest — they'll be handled in a later pass)
+- [RULE] Tag/group test functions by story ID so the mapping is recoverable from the test file
+- [RULE] If a target story's `acceptance_criteria:` list is empty, escalate (don't invent tests)
+- [RULE] When editing a story YAML, change ONLY the `status:` field — do not touch `id`, `title`, `dependencies`, `description`, or `acceptance_criteria`
+- [RULE] Preserve YAML validity after every edit (the file must still parse)
 - [RULE] Update progress file BEFORE reporting
 - [STOP] NO test execution
 - [STOP] NO code implementation
+- [STOP] NEVER set a story to `IN_DEV` without an actual test for it
+- [STOP] NEVER touch stories outside your target set
 
 ---
 
@@ -86,7 +126,10 @@ SendMessage(
 
 Test file: <path where you created the file>
 Test functions: <count and names>
-Coverage: All acceptance criteria covered
+Coverage: All acceptance criteria covered for target stories
+
+Stories advanced to IN_DEV: <STORY-1, STORY-3, ...>
+Stories left at TODO (deps not met): <STORY-N or "none">
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```

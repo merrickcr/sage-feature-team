@@ -26,11 +26,14 @@ The actual test command, test paths, and result parsing all come from the **Test
 /sage-dev-test --max-cycles 10          # Override cycle limit
 ```
 
-Extract:
-- **Targeted tests** — Any positional args become a list of test names. If empty → full regression.
-- **`--max-cycles N`** — Override default `max_cycles` from config.
+Compute these once and reuse:
+- **targeted_tests** — list from positional args, or empty (full regression)
+- **test_scope** — `"full regression"` if no targeted tests, else `"specific tests: <names>"`
+- **max_cycles** — from `--max-cycles N` if given, else from config
 
-Don't ask the user for a feature name or requirements. Use the label `dev_test_cycle` for messages.
+Don't ask the user for a feature name or requirements. Use the literal label `dev_test_cycle` in messages.
+
+When you send messages to agents below, write the message naturally with these literal values inlined — not Python f-string syntax with `{...}` placeholders.
 
 ---
 
@@ -77,22 +80,11 @@ Both agents idle until you send a SendMessage task — `_BASE.md` enforces the T
 
 ## Step 4: Initial Test Run (Discovery)
 
-Send Tester an initial discovery task to find what's failing:
-
-```python
-SendMessage(
-  to="Tester",
-  summary="Run tests (initial discovery)",
-  message=f"""@User: [Dev-Test] Run tests and report results. (Initial discovery)
-
-[Task: tester-discovery]
-
-Test scope: {full regression OR list of targeted test names}
-
-Job: Run tests per your project instructions, report TEST_FAILURE lines for any failures.
-
-Reference: HANDBOOK.md""")
-```
+Send a SendMessage to `Tester` whose body includes:
+- `@User: [Dev-Test] Run tests and report results. (Initial discovery)` opener
+- `[Task: tester-discovery]`
+- `Test scope: <test_scope>` (literal — `"full regression"` or the targeted test names)
+- `Reference: HANDBOOK.md`
 
 Run **ACK + completion monitoring** (Step 6).
 
@@ -123,41 +115,20 @@ WHILE cycle_count <= max_cycles:
 
 ### Developer message
 
-```python
-SendMessage(
-  to="Developer",
-  summary=f"Fix failing tests (cycle {n}/{max})",
-  message=f"""@User: [Dev-Test Cycle {n}/{max}] Make failing tests pass.
-
-[Task: dev-cycle-{n}] [Cycle: {n}/{max}]
-
-[If cycle > 1, paste the previous TEST_FAILURE lines here]
-
-Failing tests to fix:
-- <name 1>
-- <name 2>
-
-Job: Fix implementation only. Do NOT run tests — Tester runs them. Follow your project instructions for code conventions and file locations.
-
-Reference: HANDBOOK.md""")
-```
+Send to `Developer`, body includes:
+- `@User: [Dev-Test Cycle <n>/<max>] Make failing tests pass.` opener
+- `[Task: dev-cycle-<n>] [Cycle: <n>/<max>]`
+- If cycle > 1: paste previous cycle's `TEST_FAILURE` lines verbatim
+- `Failing tests to fix:` followed by a bulleted list of test names
+- `Reference: HANDBOOK.md`
 
 ### Tester message
 
-```python
-SendMessage(
-  to="Tester",
-  summary=f"Run tests (cycle {n}/{max})",
-  message=f"""@User: [Dev-Test Cycle {n}/{max}] Run tests and report results.
-
-[Task: tester-{n}] [Cycle: {n}/{max}]
-
-Test scope: {same as discovery — full regression or targeted list}
-
-Job: Follow your project instructions for setup, command, log paths, and parsing. Report TEST_FAILURE lines for any failures.
-
-Reference: HANDBOOK.md""")
-```
+Send to `Tester`, body includes:
+- `@User: [Dev-Test Cycle <n>/<max>] Run tests and report results.` opener
+- `[Task: tester-<n>] [Cycle: <n>/<max>]`
+- `Test scope: <test_scope>` (same value as discovery)
+- `Reference: HANDBOOK.md`
 
 ### Idle = completion
 
