@@ -1,0 +1,39 @@
+# Sage Feature Team config for chatbot
+#
+# Project-specific HOW lives in the chatbot's own .sage/ directory:
+#   C:\Users\merri\claudeProjects\chatbot\.sage\
+# Each agent's instructions list points at chatbot docs.
+
+project:
+  name: "chatbot"
+  root_dir: "."
+  absolute_root_dir: "C:\\Users\\merri\\claudeProjects\\chatbot"
+
+team:
+  name: "chatbot-feature-team"
+  dev_test_team_name: "chatbot-dev-test-team"
+  agents:
+    full:
+      - name: "ProductOwner"
+        file: "agents/product-owner.md"
+      - name: "TestCreator"
+        file: "agents/test-creator.md"
+      - name: "Developer"
+        file: "agents/developer.md"
+      - name: "Tester"
+        file: "agents/tester.md"
+    dev_test_only:
+      - name: "Developer"
+        file: "agents/developer.md"
+      - name: "Tester"
+        file: "agents/tester.md"
+
+paths:
+  output_dir: "_output"
+  # In a real project, sage_dir would default to <absolute_root_dir>/.sage.
+  # Here we point at the example bundled with sage-feature-team so the loader
+  # can be exercised without writing into the chatbot project.
+  sage_dir: "examples/chatbot/.sage"
+
+limits:
+  max_cycles: 5

@@ -1,0 +1,9 @@
+# Developer instructions for the chatbot project (EXAMPLE)
+
+instructions:
+  - "Read .sage/developer/codebase_overview.md for module boundaries (sage/chat, sage/llm, sage/memory, sage/web)."
+  - "Read .sage/developer/conventions.md for code style, error handling, and Flask route patterns."
+  - "Flask routes live in sage/web/routes.py. Never put business logic in routes — delegate to sage/chat or sage/memory."
+  - "LLM provider abstractions live in sage/llm/. Add new providers as subclasses, don't branch in callers."
+  - "Memory/persistence code is in sage/memory/. Profile, session, and vault each have their own module — keep concerns separated."
+  - "When in doubt about where a new module goes, consult .sage/developer/codebase_overview.md before creating files."

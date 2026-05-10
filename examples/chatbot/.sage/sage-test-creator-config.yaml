@@ -1,0 +1,9 @@
+# TestCreator instructions for the chatbot project (EXAMPLE)
+
+instructions:
+  - "Read tests/TESTING_GUIDE.md for the project's testing philosophy and patterns."
+  - "Read tests/EDGE_CASE_TESTING_README.md for edge-case conventions specific to this chatbot."
+  - "When writing tests, read .sage/test-creator/test_structure.md for file organization, imports, and naming."
+  - "All tests live in tests/ and follow the naming pattern test_<feature_name>.py (snake_case, pytest convention)."
+  - "Tests must be integration tests against a real running Flask instance — no mocks for Flask routes, sessions, or storage."
+  - "Use the pytest fixtures defined in tests/conftest.py (if present) for client setup. Don't roll your own client."
