@@ -6,7 +6,7 @@ when_to_use: When you want to create tests for a story that has been spec'd but 
 
 # Sage TestCreator Skill (inline)
 
-You ARE the TestCreator for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
+This skill runs the TestCreator role solo: write tests for one story's acceptance criteria, tag them by story ID, flip the story to IN_DEV, and report to the user as plain text.
 
 > **Path note:** All `python .sage/_tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead.
 
@@ -27,20 +27,25 @@ Compute:
 
 ---
 
-## Step 2: Load Rendered TestCreator Prompt
+## Step 2: Load Rendered TestCreator Prompt (for project instructions and role contract)
 
 ```bash
 python .sage/_tools/load_agents.py full
 ```
 
-From the JSON, extract `agents.TestCreator`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (test framework, file location, naming convention, story-ID tagging convention).
+From the JSON, extract `agents.TestCreator`. The rendered prompt has two kinds of content -- use them differently:
 
-**Skip these parts of the rendered prompt** -- only apply when running as a spawned worker:
-- ACK message / `STATUS: ACKNOWLEDGED`
-- Handshake `[SYN]` / `[SYN-ACK]` / `[ACK]` flow
-- Any `SendMessage(to="User", ...)` calls -- talk to the user with normal text instead
-- Task-Waiting Rule (the skill invocation IS the task)
-- Silence Rule (you should communicate normally)
+**Use these sections** (mode-agnostic role contract -- they apply to you):
+- `agents/_BASE.md` § Project-Specific Instructions -- the project's test framework, file location, naming, and story-ID tagging convention
+- `agents/test-creator.md` § Your Job
+- `agents/test-creator.md` § Tests You Cannot Write at Your Seam -- stub-test rules, FORBIDDEN words
+- `agents/test-creator.md` § Story-ID Tagging Convention (Project-Specific) -- mechanism examples, mapping rules
+- `agents/test-creator.md` § Key Rules
+
+**Ignore these sections** (team-mode workflow that does not apply when invoked as a skill):
+- `_BASE.md` § STOP / SILENCE RULE / ACK FIRST / Workflow / Completion Handshake / Escalation Pattern / Progress File Updates / Key Rules (All Agents)
+- `test-creator.md` § TestCreator Workflow (After Receiving Task) -- this skill defines its own workflow below
+- `test-creator.md` § Completion Message Format -- this skill reports to the user as plain text instead
 
 If `success` is false, surface the loader's `error` and stop.
 
@@ -79,49 +84,37 @@ Set `target_story` to the chosen story ID.
 
 ---
 
-## Step 5: Do the Work (per TestCreator role)
+## Step 5: Do the Work
 
-Following the TestCreator role file (already rendered in Step 2):
-
-1. **Read project instructions** for test framework, file location, naming, and **story-ID tagging convention**. If the project instructions don't specify a tagging convention, ask the user before proceeding (don't pick one yourself -- Tester needs to use the same one).
-2. **Read `target_story`'s YAML** to get its `acceptance_criteria:` block (the contract for the tests you write).
+1. **Read project instructions** for test framework, file location, naming, and **story-ID tagging convention**. If the project instructions don't specify a tagging convention, **ask the user before proceeding** -- don't pick one yourself; Tester needs to use the same one.
+2. **Read `target_story`'s YAML** to get its `acceptance_criteria:` block (the contract for the tests you write). If the AC list is empty, stop and ask the user.
 3. **Flip `target_story` to `CREATE_TESTS`** via the helper script:
    ```bash
    python .sage/_tools/update_story_status.py STORY-N CREATE_TESTS --stories-dir <stories_dir>
    ```
    Check the JSON return; on `success: false`, stop and report.
-4. **Write the test file(s)** for `target_story`'s AC, using the project's framework, location, naming, and tagging convention. Tag/group test functions by `target_story`'s ID so the mapping is recoverable from the test file alone.
-5. **Flip `target_story` from `CREATE_TESTS` to `IN_DEV`** via the helper script:
+4. **Write the test file(s)** for `target_story`'s AC, using the project's framework, location, naming, and tagging convention. Tag/group test functions by `target_story`'s ID so the mapping is recoverable from the test file alone -- see `agents/test-creator.md` § Story-ID Tagging Convention (Project-Specific) for examples and rules.
+5. **Handle AC you cannot test at your seam** (UI without UI test seam, manual-QA AC, device-only AC) per `agents/test-creator.md` § Tests You Cannot Write at Your Seam: write a stub test at the appropriate location, marked to skip in the default suite. The FORBIDDEN word list ("deferred", "future", "later", "next pass", etc.) applies to your reporting too.
+6. **Apply the role's Key Rules throughout** -- see `agents/test-creator.md` § Key Rules. Highlights: NEVER set a story to `IN_DEV` without an actual test for every AC, NEVER touch stories outside the target, NO test execution, NO code implementation.
+7. **Flip `target_story` from `CREATE_TESTS` to `IN_DEV`** via the helper script:
    ```bash
    python .sage/_tools/update_story_status.py STORY-N IN_DEV --stories-dir <stories_dir>
    ```
-6. **Report to the user** as plain text:
-   ```
-   Story: <target_story> -> IN_DEV
-   AC covered: AC1, AC2, ...
-   Tests written: <count>
-   Test file(s):
-     - <path>
-   Test functions:
-     - <name1>
-     - <name2>
-     ...
-   ```
 
----
+When done, **report to the user as plain text:**
 
-## Key Rules (from TestCreator role)
-
-- Read project instruction files BEFORE writing tests
-- Follow project's test naming and location conventions exactly
-- Use the project's test framework -- don't switch
-- Test names describe behavior, not AC numbers
-- Always use `update_story_status.py` for status flips -- never hand-edit story YAMLs
-- Tag/group every test by story ID using the project convention
-- If the target story's `acceptance_criteria:` is empty, stop and ask the user
-- NO test execution, NO code implementation
-- NEVER set a story to `IN_DEV` without an actual test for it
-- NEVER touch stories outside the target
+```
+Story: <target_story> -> IN_DEV
+AC covered: AC1, AC2, ...
+Tests written: <count>
+Test file(s):
+  - <path>
+Test functions:
+  - <name1>
+  - <name2>
+  ...
+Stub tests (if any): <path -- marked skip; targets AC that can't run at this seam>
+```
 
 ---
 

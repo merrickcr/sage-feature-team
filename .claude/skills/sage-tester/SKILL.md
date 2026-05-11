@@ -6,7 +6,7 @@ when_to_use: When you want to run tests for a story currently at TESTING and upd
 
 # Sage Tester Skill (inline)
 
-You ARE the Tester for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
+This skill runs the Tester role solo: run tests for a single story (or full regression with `--full`), apply the two-gate logic to decide DONE vs IN_DEV, flip story statuses, and report to the user as plain text.
 
 > **Path note:** All `python .sage/_tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead.
 
@@ -30,21 +30,24 @@ Compute:
 
 ---
 
-## Step 2: Load Rendered Tester Prompt
+## Step 2: Load Rendered Tester Prompt (for project instructions and role contract)
 
 ```bash
 python .sage/_tools/load_agents.py full
 ```
 
-From the JSON, extract `agents.Tester`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (test command, log location, parsing patterns, setup/cleanup steps).
+From the JSON, extract `agents.Tester`. The rendered prompt has two kinds of content -- use them differently:
 
-**Skip these parts of the rendered prompt** -- only apply when running as a spawned worker:
-- ACK message / `STATUS: ACKNOWLEDGED`
-- Handshake `[SYN]` / `[SYN-ACK]` / `[ACK]` flow
-- Any `SendMessage(to="User", ...)` calls -- talk to the user with normal text instead
-- `ScheduleWakeup` polling pattern (you can simply wait on the test process synchronously, or use Monitor inline)
-- Task-Waiting Rule (the skill invocation IS the task)
-- Silence Rule (you should communicate normally -- but don't narrate during the test run)
+**Use these sections** (mode-agnostic role contract -- they apply to you):
+- `agents/_BASE.md` § Project-Specific Instructions -- the project's test command, log location, parsing patterns, setup/cleanup
+- `agents/tester.md` § Your Job
+- `agents/tester.md` § Key Rules -- monitoring, story-status gating, boundaries
+
+**Ignore these sections** (team-mode workflow that does not apply when invoked as a skill):
+- `_BASE.md` § STOP / SILENCE RULE / ACK FIRST / Workflow / Completion Handshake / Escalation Pattern / Progress File Updates / Key Rules (All Agents)
+- `tester.md` § Tester Workflow (After Receiving Task) -- this skill defines its own workflow below (the two-gate logic is inlined in Step 6)
+- `tester.md` § Async Polling Pattern (Universal) -- inline `Monitor` or wait synchronously instead of `ScheduleWakeup`
+- `tester.md` § Completion Message Format -- this skill reports to the user as plain text instead
 
 If `success` is false, surface the loader's `error` and stop.
 
@@ -90,18 +93,16 @@ If `scope == "story"`: also use the convention to construct the test selector fo
 
 ---
 
-## Step 6: Do the Work (per Tester role)
-
-Following the Tester role file (already rendered in Step 2):
+## Step 6: Do the Work
 
 1. **Consult project instructions** for setup, run command, log location, parsing patterns, cleanup.
-2. **Execute pre-test setup** if the project instructions specify one.
-3. **Run tests** per project instructions:
-   - `scope == "story"`: run only tests tagged for `target_story` using the project's selector idiom
-   - `scope == "full regression"`: run the full suite as the project instructions describe
-4. **Wait for completion** -- for short runs, just wait for the command to finish. For long-running suites, use the `Monitor` tool to stream output and check periodically.
+2. **Execute pre-test setup** if specified.
+3. **Run tests:**
+   - `scope == "story"`: run only tests tagged for `target_story` using the project's selector idiom (the selector you built in Step 5)
+   - `scope == "full regression"`: run the full suite per project instructions
+4. **Wait for completion** -- for short runs, just wait. For long-running suites, use the `Monitor` tool to stream output and check periodically. If a test hangs (no output for 30s+), kill the process and report it as a hang -- don't leave the user waiting.
 5. **Execute post-test cleanup** if specified.
-6. **Parse results** per the project's parsing patterns. Map each test -> story via the tagging convention.
+6. **Parse results** per the project's parsing patterns. Map each test -> story via the tagging convention from Step 5.
 7. **For each story you actually exercised that was at `TESTING`, run TWO gates** before deciding DONE vs IN_DEV (NEVER edit YAMLs directly):
 
    **Gate A: All tagged tests passed?** (Necessary)
@@ -111,7 +112,7 @@ Following the Tester role file (already rendered in Step 2):
      ```
    - All passed -> proceed to Gate B.
 
-   **Gate B: AC implementation map sidecar verified?** (Also necessary)
+   **Gate B: AC implementation map sidecar verified?** (Also necessary -- green tests alone do NOT satisfy AC)
    ```bash
    python .sage/_tools/verify_ac_map.py STORY-N --stories-dir <stories_dir>
    ```
@@ -119,46 +120,36 @@ Following the Tester role file (already rendered in Step 2):
      ```bash
      python .sage/_tools/update_story_status.py STORY-N DONE --stories-dir <stories_dir>
      ```
-   - Returns `success: false` -> flip back to `IN_DEV` (the Developer must fix the sidecar -- missing AC, banned words, or no impl path):
+   - Returns `success: false` -> flip back to `IN_DEV`:
      ```bash
      python .sage/_tools/update_story_status.py STORY-N IN_DEV --stories-dir <stories_dir>
      ```
-     Capture the verifier's JSON output verbatim for the user report -- it tells the Developer exactly what's missing.
+     **Capture the verifier's JSON output verbatim for the user report** -- it tells the Developer exactly what's missing (missing AC, banned-word hits, AC with no impl path).
 
    - In `scope == "story"` mode, only run gates for `target_story` (other `TESTING` stories weren't run).
    - Check each `update_story_status.py` return; on `success: false`, surface and continue.
-8. **Report to the user** as plain text:
-   ```
-   Scope: <story | full regression>
-   Story: <target_story or "n/a">
-   Results: <passed>/<total> passed in <elapsed>s
 
-   Story status changes:
-     - STORY-X: TESTING -> DONE         (Gate A: tests [OK]  Gate B: AC map [OK])
-     - STORY-Y: TESTING -> IN_DEV       (Gate A failed -- failures: <test_names>)
-     - STORY-Z: TESTING -> IN_DEV       (Gate A passed but Gate B failed -- see verifier output below)
+8. **Apply the role's Key Rules throughout** -- see `agents/tester.md` § Key Rules. Highlights: don't modify test or source code (that's `/sage-developer`'s job), never hand-edit story YAMLs, leave stories outside scope untouched.
 
-   Test failures:
-     - <test_name>: <one-line summary of why it failed>
-     ...
+When done, **report to the user as plain text:**
 
-   AC map failures (per story sent back for AC-map gap):
-     - STORY-Z: <verifier JSON verbatim -- missing_ac, banned_word_hits, no_path_ac>
-   ```
+```
+Scope: <story | full regression>
+Story: <target_story or "n/a">
+Results: <passed>/<total> passed in <elapsed>s
 
-If a test hangs (no output for 30s+), kill the process and report it as a hang -- don't leave the user waiting.
+Story status changes:
+  - STORY-X: TESTING -> DONE         (Gate A: tests [OK]  Gate B: AC map [OK])
+  - STORY-Y: TESTING -> IN_DEV       (Gate A failed -- failures: <test_names>)
+  - STORY-Z: TESTING -> IN_DEV       (Gate A passed but Gate B failed -- see verifier output below)
 
----
+Test failures:
+  - <test_name>: <one-line summary of why it failed>
+  ...
 
-## Key Rules (from Tester role)
-
-- Read project instructions BEFORE inventing test commands or parsing patterns
-- Don't modify test code, source code, or analyze failures (that's Developer's job -- re-run with `/sage-developer` after)
-- Always use `update_story_status.py` for status flips -- never hand-edit story YAMLs
-- A story reaches `DONE` only when **both** gates pass: (a) every tagged test passed, AND (b) `verify_ac_map.py` returns success
-- If Gate B fails, the story goes back to `IN_DEV` even if all tests passed -- green tests do NOT satisfy AC by themselves
-- Leave stories outside the run's actual scope untouched
-- Detect hangs (30s+ no output) and stop
+AC map failures (per story sent back for AC-map gap):
+  - STORY-Z: <verifier JSON verbatim -- missing_ac, banned_word_hits, no_path_ac>
+```
 
 ---
 

@@ -6,7 +6,7 @@ when_to_use: When you want to create a new feature specification and stories fro
 
 # Sage ProductOwner Skill (inline)
 
-You ARE the ProductOwner for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
+This skill runs the ProductOwner role solo: write a feature specification, break it into stories (one YAML per story), iterate on user feedback, and report when approved.
 
 > **Path note:** All `python .sage/_tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead.
 
@@ -28,22 +28,26 @@ If no feature description was provided, ask the user what feature they want.
 
 ---
 
-## Step 2: Load Rendered ProductOwner Prompt
-
-Run the loader to get the project-instruction-rendered ProductOwner prompt:
+## Step 2: Load Rendered ProductOwner Prompt (for project instructions and role contract)
 
 ```bash
 python .sage/_tools/load_agents.py full
 ```
 
-From the JSON, extract `agents.ProductOwner` and `config_summary.absolute_root_dir`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (project conventions you must follow), the spec format, the Story YAML format, and the rules.
+From the JSON, extract `agents.ProductOwner` and `config_summary.absolute_root_dir`. The rendered prompt has two kinds of content -- use them differently:
 
-**Skip these parts of the rendered prompt** -- they apply only when running as a spawned worker:
-- ACK message / `STATUS: ACKNOWLEDGED`
-- Handshake `[SYN]` / `[SYN-ACK]` / `[ACK]` flow
-- Any `SendMessage(to="User", ...)` calls -- talk to the user with normal text instead
-- Task-Waiting Rule (the skill invocation IS the task)
-- Silence Rule (you should communicate normally)
+**Use these sections** (mode-agnostic role contract -- they apply to you):
+- `agents/_BASE.md` § Project-Specific Instructions -- the project's conventions
+- `agents/product-owner.md` § Your Job
+- `agents/product-owner.md` § Spec Format (Markdown) -- exact spec layout
+- `agents/product-owner.md` § Story Format (YAML -- one file per story) -- YAML schema, status legend, optional fields, rules for stories
+- `agents/product-owner.md` § Critical Rules
+
+**Ignore these sections** (team-mode workflow that does not apply when invoked as a skill):
+- `_BASE.md` § STOP / SILENCE RULE / ACK FIRST / Workflow / Completion Handshake / Escalation Pattern / Progress File Updates / Key Rules (All Agents)
+- `product-owner.md` § ProductOwner Workflow (After Receiving Task) -- this skill defines its own workflow below
+- `product-owner.md` § Approval Process (Two Steps) -- this skill handles approval inline (Step 4 below)
+- `product-owner.md` § Completion Message Format -- this skill reports to the user as plain text instead
 
 If `success` is false, surface the loader's `error` and stop.
 
@@ -59,58 +63,27 @@ If `success` is false, surface the loader's `error` and stop.
 
 ---
 
-## Step 4: Do the Work (per ProductOwner role)
+## Step 4: Do the Work
 
-Following the ProductOwner role file (already rendered in Step 2):
-
-1. **Read project instructions** referenced in the rendered prompt that are relevant to spec/stories writing.
-2. **Create the spec file** (`spec_file`) with: Overview, Requirements, Edge Cases, Technical Notes. **The spec does NOT contain an Acceptance Criteria section** -- AC live inside the story YAMLs. Focus on WHAT, not HOW.
-3. **Create the stories directory** (`stories_dir`) and write one YAML file per story (`STORY-1.yaml`, `STORY-2.yaml`, ...) using the Story YAML format from the rendered prompt:
-   ```yaml
-   id: STORY-N
-   title: ...
-   status: TODO
-   dependencies: []        # or ["STORY-1", ...]
-   description: |
-     ...
-   acceptance_criteria:
-     - id: ACx
-       text: ...
-   ```
-   - Group AC into logical, cohesive stories (every AC for the feature lives in exactly one story; no orphans, no duplicates)
-   - AC IDs (`AC1`, `AC2`, ...) must be **unique across the entire feature** -- don't reuse `AC1` in two different stories
-   - Story IDs are stable (`STORY-1`, `STORY-2`, ...) -- never renumber after approval
+1. **Read project instructions** from the rendered prompt that are relevant to spec/stories writing.
+2. **Create the spec file** at `spec_file` -- follow `agents/product-owner.md` § Spec Format (Markdown) exactly. Sections: Overview, Requirements, Edge Cases, Technical Notes. **No Acceptance Criteria section** -- AC live inside the story YAMLs. Focus on WHAT, not HOW.
+3. **Create the stories directory** at `stories_dir` and write one YAML file per story (`STORY-1.yaml`, `STORY-2.yaml`, ...). Schema, status legend, optional fields, and rules for stories are in `agents/product-owner.md` § Story Format (YAML -- one file per story). Key invariants:
+   - Every AC for the feature lives in exactly one story (no orphans, no duplicates)
+   - AC IDs (`AC1`, `AC2`, ...) unique across the entire feature
+   - Story IDs stable (`STORY-1`, ...) -- never renumber after approval
    - Filename matches `id` (`STORY-1.yaml` contains `id: STORY-1`)
    - Story dependencies form a DAG (no cycles)
    - All stories start at `status: TODO`
-
-4. **Show the user a brief summary** (counts of requirements / stories / total AC) and ask for review:
-   - Either feedback (you'll iterate) or `APPROVED` (you finish)
-
-5. **On feedback**: update the spec/stories, summarize the diff, re-request approval. Loop.
-
-6. **On APPROVED**: report completion as plain text (no handshake):
+4. **Apply the role's Critical Rules throughout** -- see `agents/product-owner.md` § Critical Rules (snake_case feature name, AC must be testable, valid YAML, no tests/no code).
+5. **Show the user a brief summary** (counts of requirements / stories / total AC) and ask for review. They'll respond with feedback or `APPROVED`.
+6. **On feedback:** update the spec/stories, summarize the diff, re-request approval. Loop. **FEEDBACK != APPROVAL** -- only an explicit `APPROVED` finishes the skill.
+7. **On `APPROVED`:** report completion to the user as plain text:
    ```
    Spec:        <spec_file>
    Stories dir: <stories_dir>
    Stories:     STORY-1.yaml, STORY-2.yaml, ... (<N> total, all status: TODO)
    AC:          <total_ac> distributed across <N> stories
    ```
-
----
-
-## Key Rules (from ProductOwner role)
-
-- Snake_case feature name in ALL files
-- FEEDBACK != APPROVAL -- iterate until explicit `APPROVED`
-- Acceptance criteria must be testable
-- Spec file has NO Acceptance Criteria section -- AC live in story YAMLs
-- Every AC for the feature lives in exactly one story (no orphans, no duplicates)
-- AC IDs are unique across the whole feature, not just within a story
-- Story dependencies form a DAG (no cycles)
-- All stories start at `TODO`
-- YAML must be valid (parseable) -- agents downstream load it programmatically
-- NO tests, NO code -- spec and stories only
 
 ---
 
