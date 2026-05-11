@@ -131,7 +131,6 @@ python ~/claudeProjects/sage-feature-team/_tools/setup_project.py \
 | `sage-config.SCHEMA.md` | `.sage/sage-config.SCHEMA.md` |
 | `templates/` | `.sage/templates/` |
 | `guides/` | `.sage/guides/` |
-| `references/` | `.sage/references/` |
 | `.claude/skills/sage-feature-team/SKILL.md` | `.claude/skills/sage-feature-team/SKILL.md` |
 | `.claude/skills/sage-dev-test/SKILL.md` | `.claude/skills/sage-dev-test/SKILL.md` |
 

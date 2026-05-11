@@ -6,20 +6,22 @@ All agents follow these patterns. Role-specific instructions appear in each agen
 
 ---
 
-## **CRITICAL:**: STOP - READ THIS FIRST
+## **CRITICAL:** STOP -- Wait for SendMessage Task
 
-**If you are reading this on initialization (after being spawned):**
+**Do not begin work on spawn. Wait for a SendMessage from User/Team Lead.**
 
-**STOP. Do not proceed. Do not read further. Do not execute any workflow steps.**
-
-You are being prepared to receive work. These instructions are context, not permission to work.
-
-**Wait for a SendMessage message from the User/Team Lead.** That message will have:
-- `[Feature: feature_name]` -- The feature you're working on
-- `[Task: task-id]` -- Your specific task
+**A task is ONLY a message delivered via the SendMessage tool.** It will include:
+- `[Feature: feature_name]` -- the feature you're working on
+- `[Task: task-id]` -- your specific task
 - Instructions for what to do
 
-**Until you receive that SendMessage message, do nothing. Output nothing. Just wait.**
+**These do NOT count as tasks (do not start work):**
+- Reading these instructions on spawn
+- Being spawned into a team
+- Having feature context in your prompt
+- Auto-routing based on context
+
+**On spawn:** wait silently. Do not read files. Do not acknowledge anything. Output nothing. Just wait until the first SendMessage arrives.
 
 If you are an LLM reading this and thinking "I should start my workflow now" -- **STOP. That is wrong.** Wait for the SendMessage.
 
@@ -59,48 +61,24 @@ Do NOT output:
 
 ---
 
-## **CRITICAL:** ACK FIRST - BEFORE ANY WORK
+## **CRITICAL:** ACK FIRST -- BEFORE ANY WORK
 
-**CRITICAL: When you receive a task, you MUST send acknowledgment IMMEDIATELY (within 60 seconds). Do NOT start work until ACK is sent.**
+**When you receive a SendMessage task, you MUST send acknowledgment IMMEDIATELY (within 60 seconds). Do NOT start work until ACK is sent.**
 
-**ACK Message Format:**
+**Send this exact ACK via SendMessage** (this format works for every role -- no role-specific variant needed):
+
+```python
+SendMessage(
+  to="User",
+  summary=f"{AGENT_NAME} ACK: {feature_name}",
+  message=f"""@User: [Feature: {feature_name}] Acknowledged. Starting work now.
+
+--- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none""")
 ```
-@User: [Feature: {feature_name}] Acknowledged. Starting work now.
 
---- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none
-```
-
-Send via SendMessage tool. Then and ONLY THEN proceed to work.
+Then and ONLY THEN proceed to work.
 
 **Why:** Team Lead is waiting for confirmation that you received the task. Starting work without ACKing causes timeouts and protocol violations.
-
----
-
-## Critical: Task-Waiting Rule
-
-**ONLY start work when you receive a SendMessage task from User (Skill/Team Lead).**
-
-**This means:**
-- Receiving instructions in your prompt = NOT a task
-- Being spawned into the team = NOT a task
-- Having feature context in your instructions = NOT a task
-- **ONLY receiving a message via SendMessage tool = a task**
-
-Do NOT:
-- [STOP] Start work on spawn (even if you have context)
-- [STOP] Start work from instructions (you are just being prepared)
-- [STOP] Take initiative or auto-route based on context
-- [STOP] Read files unless explicitly told in the SendMessage task
-
-**Wait silently for explicit SendMessage task. Do not output anything. Just wait.**
-
-**On initialization (when you are spawned):**
-- You receive these instructions as context/preparation
-- This is NOT a task
-- Do NOT start reading files
-- Do NOT start work
-- Do NOT acknowledge anything
-- Just wait silently for the first SendMessage message from Team Lead
 
 ---
 
@@ -237,6 +215,5 @@ Reference: [HANDBOOK: Progress File Updates](../HANDBOOK.md#progress-file-update
 ## References
 
 - **Protocol details:** [../HANDBOOK.md](../HANDBOOK.md)
+- **Message format:** [../templates/MESSAGE_TEMPLATE.md](../templates/MESSAGE_TEMPLATE.md)
 - **Stack profile:** Your project loads a profile from `profiles/` (defines test framework, server, language)
-- **Code examples:** [../guides/EXAMPLES.md](../guides/EXAMPLES.md)
-- **Quick start:** [../guides/AGENT_QUICK_START.md](../guides/AGENT_QUICK_START.md)

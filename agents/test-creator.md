@@ -15,19 +15,6 @@ Tests should:
 
 ---
 
-## Initial ACK (Required - Send This FIRST)
-
-```python
-SendMessage(
-  to="User",
-  summary="TestCreator ACK: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Acknowledged. Starting test creation now.
-
---- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none""")
-```
-
----
-
 ## TestCreator Workflow (After Receiving Task)
 
 Following the base workflow from _BASE.md:
@@ -38,10 +25,9 @@ Following the base workflow from _BASE.md:
 4. **Determine target stories** -- task message may name specific story IDs; otherwise, target every story whose YAML has `status: TODO` AND every entry in its `dependencies:` resolves to a story whose YAML has `status: DONE`
 5. **Flip target stories to `CREATE_TESTS`** using the helper script (NEVER edit story YAMLs directly):
    ```bash
-   python .sage/_tools/update_story_status.py STORY-N CREATE_TESTS \
+   python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N CREATE_TESTS \
        --stories-dir _output/FEATURE_STORIES_{name}
    ```
-   (Use `_tools/update_story_status.py` if running from the sage-feature-team source itself.)
    The helper does an atomic, locked YAML update -- concurrent workers won't trample each other. Check the JSON return value; if `success: false`, escalate.
 6. **Consult project instructions** -- Read referenced files for test structure, naming, framework
 7. **Create the test file(s)** using project conventions (location, naming, framework)
@@ -49,7 +35,7 @@ Following the base workflow from _BASE.md:
    - Tag test functions by story ID per the project's tagging convention so downstream agents can map test -> story
 8. **Flip target stories from `CREATE_TESTS` to `IN_DEV`** using the helper script:
    ```bash
-   python .sage/_tools/update_story_status.py STORY-N IN_DEV \
+   python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N IN_DEV \
        --stories-dir _output/FEATURE_STORIES_{name}
    ```
 9. **Update progress file** -- Mark Tests: DONE, list test function names AND story IDs covered, AND list any stub-test files written (see "Tests You Cannot Write at Your Seam" below)
@@ -112,7 +98,6 @@ choose, depending on framework idioms:
 - [RULE] Tag/group test functions by story ID so the mapping is recoverable from the test file
 - [RULE] If a target story's `acceptance_criteria:` list is empty, escalate (don't invent tests)
 - [RULE] Status flips go through `update_story_status.py` -- it changes ONLY the `status:` field (and `blocked_reason:` on BLOCKED transitions) and preserves the rest. Don't hand-edit `id`, `title`, `dependencies`, `description`, or `acceptance_criteria`.
-- [RULE] Update progress file BEFORE reporting
 - [STOP] NO test execution
 - [STOP] NO code implementation
 - [STOP] NEVER set a story to `IN_DEV` without at least one test (runnable OR stub) for every AC in that story
@@ -121,28 +106,11 @@ choose, depending on framework idioms:
 
 ---
 
-## Completion Handshake
+## Completion Message Format
 
-See [HANDBOOK: Message Delivery Handshake Protocol](../HANDBOOK.md#message-delivery-handshake-protocol-true-3-way-syn--syn-ack--ack).
+Run the 3-way handshake mechanics from [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents). Use `message_id = f"tc-tests-{feature_name}-{int(time.time())}"`.
 
-**Step 1: Send [SYN]**
-
-```python
-message_id = f"tc-tests-{feature_name}-{int(time.time())}"
-
-SendMessage(
-  to="User",
-  summary="TestCreator handshake: SYN",
-  message=f"""@User: [Feature: {feature_name}] Test creation handshake initiated.
-
-[SYN] {message_id}
-
-Awaiting SYN-ACK to proceed with completion details.""")
-```
-
-**Step 2: Wait for SYN-ACK** (up to 5s, retry 3x)
-
-**Step 3: Send [ACK] + Full Data**
+**[ACK] payload (Step 5c) -- TestCreator-specific data:**
 
 ```python
 SendMessage(
@@ -161,10 +129,3 @@ Stories left at TODO (deps not met): <STORY-N or "none">
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```
-
----
-
-## References
-
-- **Project instructions:** Listed under "Project-Specific Instructions" above
-- **Protocol, progress file, escalation:** ../HANDBOOK.md

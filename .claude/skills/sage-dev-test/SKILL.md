@@ -8,6 +8,8 @@ when_to_use: When you want to run tests and fix failures without a full feature 
 
 You are the **Team Lead** for an ad-hoc dev/test cycle. You coordinate two agents -- **Developer** (fixes code) and **Tester** (runs tests) -- until tests pass or `max_cycles` is hit.
 
+> **Path note:** The `python _tools/load_agents.py` command below assumes you're in the sage-feature-team source repo. From inside an installed project (a `.sage/` directory exists), use `python .sage/_tools/load_agents.py` instead. Agent prompts spawned from the loader already have helper-script paths baked in by `load_agents.py` via `{SAGE_TOOLS_DIR}`.
+
 This is a **stateless** workflow:
 - No feature spec
 - No progress file
@@ -202,6 +204,5 @@ Recommended action: <what the user should do>
 
 - `HANDBOOK.md` -- Full protocol (handshake, ACK, escalation, Monitor)
 - `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable patterns shared with `sage-feature-team`
-- `references/ROUTING_REFERENCE.md` -- Routing decision tree
 - `agents/developer.md`, `agents/tester.md` -- Agent role files
 - `examples/chatbot/.sage/sage-tester-config.yaml` -- Reference Tester config

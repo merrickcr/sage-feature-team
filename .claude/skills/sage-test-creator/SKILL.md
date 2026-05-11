@@ -8,6 +8,8 @@ when_to_use: When you want to create tests for a story that has been spec'd but 
 
 You ARE the TestCreator for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
 
+> **Path note:** All `python .sage/_tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead.
+
 ---
 
 ## Step 1: Parse Input
@@ -28,10 +30,8 @@ Compute:
 ## Step 2: Load Rendered TestCreator Prompt
 
 ```bash
-python _tools/load_agents.py full
+python .sage/_tools/load_agents.py full
 ```
-
-(Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
 
 From the JSON, extract `agents.TestCreator`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (test framework, file location, naming convention, story-ID tagging convention).
 
@@ -89,7 +89,6 @@ Following the TestCreator role file (already rendered in Step 2):
    ```bash
    python .sage/_tools/update_story_status.py STORY-N CREATE_TESTS --stories-dir <stories_dir>
    ```
-   (Use `_tools/update_story_status.py` if running from the sage-feature-team source itself.)
    Check the JSON return; on `success: false`, stop and report.
 4. **Write the test file(s)** for `target_story`'s AC, using the project's framework, location, naming, and tagging convention. Tag/group test functions by `target_story`'s ID so the mapping is recoverable from the test file alone.
 5. **Flip `target_story` from `CREATE_TESTS` to `IN_DEV`** via the helper script:

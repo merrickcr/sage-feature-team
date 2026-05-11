@@ -8,6 +8,8 @@ when_to_use: When you want to run tests for a story currently at TESTING and upd
 
 You ARE the Tester for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
 
+> **Path note:** All `python .sage/_tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead.
+
 ---
 
 ## Step 1: Parse Input
@@ -31,10 +33,8 @@ Compute:
 ## Step 2: Load Rendered Tester Prompt
 
 ```bash
-python _tools/load_agents.py full
+python .sage/_tools/load_agents.py full
 ```
-
-(Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
 
 From the JSON, extract `agents.Tester`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (test command, log location, parsing patterns, setup/cleanup steps).
 
@@ -115,7 +115,6 @@ Following the Tester role file (already rendered in Step 2):
    ```bash
    python .sage/_tools/verify_ac_map.py STORY-N --stories-dir <stories_dir>
    ```
-   (Use `_tools/verify_ac_map.py` if running from the sage-feature-team source itself.)
    - Returns `success: true` -> flip to `DONE`:
      ```bash
      python .sage/_tools/update_story_status.py STORY-N DONE --stories-dir <stories_dir>

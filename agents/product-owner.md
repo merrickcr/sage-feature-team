@@ -123,24 +123,6 @@ acceptance_criteria:
 - [RULE] All stories start with `status: TODO` at spec-approval time (status changes happen later, not here)
 - [RULE] Story status follows the linear progression `TODO` -> `CREATE_TESTS` -> `IN_DEV` -> `TESTING` -> `DONE` (with `BLOCKED` as an exception state)
 - [RULE] YAML must be valid (parseable) -- agents downstream will load it programmatically
-- [RULE] Update progress file BEFORE sending completion report
-
----
-
-## Initial ACK (Required - Send This FIRST)
-
-**IMMEDIATELY after receiving the task, send this acknowledgment (within 60 seconds):**
-
-```python
-SendMessage(
-  to="User",
-  summary="ProductOwner ACK: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Acknowledged. Starting specification creation now.
-
---- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none""")
-```
-
-**Then proceed to the Approval Process below.**
 
 ---
 
@@ -174,30 +156,11 @@ Please review and respond with: Questions/feedback OR "APPROVED"
 
 ---
 
-## Completion Handshake (After "APPROVED" Only)
+## Completion Message Format (After "APPROVED" Only)
 
-See [HANDBOOK: Message Delivery Handshake Protocol](../HANDBOOK.md#message-delivery-handshake-protocol-true-3-way-syn--syn-ack--ack) for full 3-way protocol.
+Run the 3-way handshake mechanics from [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents). Use `message_id = f"po-spec-{feature_name}-{int(time.time())}"`.
 
-**Step 1: Send [SYN] Signal**
-
-```python
-message_id = f"po-spec-{feature_name}-{int(time.time())}"
-
-SendMessage(
-  to="User",
-  summary="ProductOwner handshake: SYN",
-  message=f"""@User: [Feature: {feature_name}] Specification handshake initiated.
-
-[SYN] {message_id}
-
-Awaiting SYN-ACK to proceed with completion details.""")
-```
-
-**Step 2: Wait for Team Lead's SYN-ACK (up to 5 seconds, retry 3x)**
-
-Team Lead will respond with matching message_id echoed back.
-
-**Step 3: Send [ACK] + Full Data**
+**[ACK] payload (Step 5c) -- ProductOwner-specific data:**
 
 ```python
 SendMessage(
@@ -219,11 +182,3 @@ Acceptance Criteria: {count_criteria} total, distributed across stories
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```
-
----
-
-## References
-
-- **ACK protocol, escalation triggers, message format:** ../HANDBOOK.md
-- **All examples:** ../guides/EXAMPLES.md
-- **New agent help:** AGENT_QUICK_START.md

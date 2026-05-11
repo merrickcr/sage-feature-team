@@ -40,19 +40,6 @@ You receive:
 
 ---
 
-## Initial ACK (Required - Send This FIRST)
-
-```python
-SendMessage(
-  to="User",
-  summary="Developer ACK: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Acknowledged. Starting code implementation now.
-
---- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none""")
-```
-
----
-
 ## Developer Workflow (After Receiving Task)
 
 Following the base workflow from _BASE.md:
@@ -72,15 +59,14 @@ Following the base workflow from _BASE.md:
    - This file is mandatory. The Tester refuses to mark the story DONE without it.
 8. **Verify your map locally** before signaling completion:
    ```bash
-   python .sage/_tools/verify_ac_map.py STORY-N --stories-dir _output/FEATURE_STORIES_{name}
+   python {SAGE_TOOLS_DIR}/verify_ac_map.py STORY-N --stories-dir _output/FEATURE_STORIES_{name}
    ```
    If it returns `success: false`, fix the gaps it reports BEFORE flipping to TESTING. (Don't game it -- actually wire the missing AC.)
 9. **Flip target stories from `status: IN_DEV` to `status: TESTING`** using the helper script (NEVER edit story YAMLs directly):
    ```bash
-   python .sage/_tools/update_story_status.py STORY-N TESTING \
+   python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N TESTING \
        --stories-dir _output/FEATURE_STORIES_{name}
    ```
-   (Use `_tools/update_story_status.py` if running from the sage-feature-team source itself.)
    The helper does an atomic, locked YAML update. Check the JSON return value; if `success: false`, escalate.
 10. **Update progress file** -- Mark Development: DONE, list modified files AND story IDs touched
 11. **Complete the 3-way handshake** (see [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
@@ -151,17 +137,14 @@ If an AC genuinely belongs in a different story (the spec was wrong), STOP and e
 - [RULE] **Story YAMLs:** flip target stories `status: IN_DEV` -> `status: TESTING` via `update_story_status.py` only AFTER you've written the AC map sidecar AND `verify_ac_map.py` returns success for that story
 - [RULE] Status flips go through `update_story_status.py` -- it changes ONLY the `status:` field and preserves the rest. Don't hand-edit other fields.
 - [RULE] Never flip a story directly to `DONE` -- only Tester does that, and only after a green test run AND a passing AC-map verification
-- [RULE] Update progress file BEFORE reporting
 
 ---
 
-## Completion Handshake
+## Completion Message Format
 
-See [HANDBOOK: Message Delivery Handshake Protocol](../HANDBOOK.md#message-delivery-handshake-protocol-true-3-way-syn--syn-ack--ack).
+Run the 3-way handshake mechanics from [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents). Use `message_id = f"dev-cycle-{n}-{feature_name}-{int(time.time())}"`.
 
-**Summary:** Send [SYN], wait for SYN-ACK, send [ACK] with `message_id = dev-cycle-{n}-{feature_name}-{timestamp}`.
-
-**Completion message format:**
+**[ACK] payload (Step 5c) -- Developer-specific data:**
 
 ```python
 SendMessage(
@@ -206,10 +189,3 @@ SendMessage(
 
 --- STATUS: ESCALATION | READY: no | BLOCKER: <type>""")
 ```
-
----
-
-## References
-
-- **Project instructions:** Listed under "Project-Specific Instructions" above
-- **Protocol, escalation, progress file:** ../HANDBOOK.md

@@ -181,6 +181,12 @@ def build_agent_prompt(agent_name, agent_file, base_content, role_content, confi
     team = config.get("team", {}) or {}
     paths = config.get("paths", {}) or {}
 
+    # SAGE_TOOLS_DIR resolves to the relative path agents should use when
+    # invoking helper scripts (update_story_status.py, verify_ac_map.py, etc.)
+    # In an installed project the .sage/ directory holds them; when running
+    # from the sage-feature-team source repo itself, they live under _tools/.
+    sage_tools_dir = ".sage/_tools" if sage_dir is not None else "_tools"
+
     variables = {
         "AGENT_NAME": agent_name,
         "AGENT_NAME_SLUG": AGENT_SLUGS.get(agent_name, agent_name.lower()),
@@ -189,6 +195,7 @@ def build_agent_prompt(agent_name, agent_file, base_content, role_content, confi
         "TEAM_NAME": team.get("name", ""),
         "DEV_TEST_TEAM_NAME": team.get("dev_test_team_name", ""),
         "OUTPUT_DIR": paths.get("output_dir", "_output"),
+        "SAGE_TOOLS_DIR": sage_tools_dir,
         "PROJECT_INSTRUCTIONS": project_instructions,
     }
 

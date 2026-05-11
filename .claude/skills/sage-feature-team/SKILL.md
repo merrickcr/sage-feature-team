@@ -8,6 +8,8 @@ when_to_use: When you want to build a complete feature from requirements through
 
 You are the **Team Lead / Orchestrator** for a multi-agent feature development workflow. You run in the main conversation; worker agents report back to you (`@User`).
 
+> **Path note:** All `python .sage/_tools/...` and `python _tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead. The agent prompts you spawn already have this path baked in by `load_agents.py` via `{SAGE_TOOLS_DIR}` -- you don't need to fix them.
+
 The workflow has two phases:
 
 1. **Phase 1 -- ProductOwner (single agent, sequential).** A long-lived ProductOwner agent creates the spec and per-story YAML files, iterates on user feedback, and waits for `APPROVED`.
@@ -64,10 +66,8 @@ When you send messages to agents below, write the message naturally with these l
 ## Step 2: Load Agent Prompts
 
 ```bash
-python _tools/load_agents.py full
+python .sage/_tools/load_agents.py full
 ```
-
-(Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
 
 Expected JSON: `success: true`, `agents` containing rendered prompts for `ProductOwner`, `TestCreator`, `Developer`, `Tester`. Validate as in the previous version of this skill; if `success: false`, surface the error and stop.
 
@@ -259,7 +259,7 @@ When a story hits `max_cycles` (Developer<->Tester loops without success) or a w
 - Add it to `escalated`
 - Mark its YAML `BLOCKED` via the helper (with a reason):
   ```bash
-  python _tools/update_story_status.py STORY-N BLOCKED \
+  python .sage/_tools/update_story_status.py STORY-N BLOCKED \
       --stories-dir <stories_dir> --reason "max_cycles exceeded after <n> rounds"
   ```
 - Report to the User: `@User: [Feature: <feature_name>] STORY-N escalated -- <reason>. Continuing other stories.`
@@ -396,7 +396,6 @@ Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 
 - `HANDBOOK.md` -- Full protocol (handshake, ACK, escalation, Monitor tool)
 - `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable Skill/Team Lead patterns
-- `references/ROUTING_REFERENCE.md` -- Routing decision tree
 - `sage-config.SCHEMA.md` -- Config field reference (including `max_parallel_workers`, `global_timeout_seconds`)
 - `_tools/update_story_status.py` -- Atomic, locked story-status updater used by all workers
 - `_tools/verify_ac_map.py` -- Verifies a story's AC implementation map sidecar (Developer's mandatory artifact); Tester calls this as Gate B before flipping to DONE

@@ -8,6 +8,8 @@ when_to_use: When you want to create a new feature specification and stories fro
 
 You ARE the ProductOwner for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
 
+> **Path note:** All `python .sage/_tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead.
+
 ---
 
 ## Step 1: Parse Input
@@ -31,10 +33,8 @@ If no feature description was provided, ask the user what feature they want.
 Run the loader to get the project-instruction-rendered ProductOwner prompt:
 
 ```bash
-python _tools/load_agents.py full
+python .sage/_tools/load_agents.py full
 ```
-
-(Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
 
 From the JSON, extract `agents.ProductOwner` and `config_summary.absolute_root_dir`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (project conventions you must follow), the spec format, the Story YAML format, and the rules.
 

@@ -16,7 +16,6 @@ What it copies (always overwritten on re-run):
   sage-config.SCHEMA.md                -> <project>/.sage/sage-config.SCHEMA.md
   templates/                           -> <project>/.sage/templates/
   guides/                              -> <project>/.sage/guides/
-  references/                          -> <project>/.sage/references/
   .claude/skills/sage-feature-team/    -> <project>/.claude/skills/sage-feature-team/
   .claude/skills/sage-dev-test/        -> <project>/.claude/skills/sage-dev-test/
   .claude/skills/sage-po/              -> <project>/.claude/skills/sage-po/
@@ -64,7 +63,6 @@ SAGE_FILES = [
     ("templates/MESSAGE_TEMPLATE.md",            "templates/MESSAGE_TEMPLATE.md"),
     ("templates/PROGRESS_TEMPLATE.md",           "templates/PROGRESS_TEMPLATE.md"),
     ("guides/ORCHESTRATOR_PATTERNS.md",          "guides/ORCHESTRATOR_PATTERNS.md"),
-    ("references/ROUTING_REFERENCE.md",          "references/ROUTING_REFERENCE.md"),
 ]
 
 # SKILL files copied (with path rewrites) into <project>/.claude/skills/.
@@ -94,7 +92,6 @@ SKILL_PATH_REWRITES = [
     ("`HANDBOOK.md`",                                         "`.sage/HANDBOOK.md`"),
     ("`sage-config.SCHEMA.md`",                               "`.sage/sage-config.SCHEMA.md`"),
     ("`guides/",                                              "`.sage/guides/"),
-    ("`references/",                                          "`.sage/references/"),
     ("`templates/",                                           "`.sage/templates/"),
     ("`agents/_BASE.md`",                                     "`.sage/agents/_BASE.md`"),
     ("`agents/developer.md`",                                 "`.sage/agents/developer.md`"),

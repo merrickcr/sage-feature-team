@@ -240,7 +240,7 @@ Please advise how to proceed.
 
 ## SendMessage Format Standard (All Team Communications)
 
-**All messages use the unified template** (see `UNIFIED_MESSAGE_TEMPLATE.md`):
+**All messages use the unified template** (see `templates/MESSAGE_TEMPLATE.md`):
 
 ```
 @User: [Feature: name] {subject}
@@ -259,7 +259,7 @@ Please advise how to proceed.
 - For task assignments: include `[Task: id]` for sequencing
 - For cycle work: include `[Cycle: n/m]` context
 
-**Examples:** See UNIFIED_MESSAGE_TEMPLATE.md for all message types (ACK, completion, work rejection, cycle summary, etc.)
+**Examples:** See `templates/MESSAGE_TEMPLATE.md` for all message types (ACK, completion, work rejection, cycle summary, etc.)
 
 ---
 
@@ -507,7 +507,7 @@ Status: Blocked, awaiting user guidance
 
 ## Unified Reporting Patterns (All Agents)
 
-**All reports use the unified template** (see `UNIFIED_MESSAGE_TEMPLATE.md`):
+**All reports use the unified template** (see `templates/MESSAGE_TEMPLATE.md`):
 
 Three report types:
 
@@ -522,7 +522,7 @@ Three report types:
 - List artifacts clearly (files changed, tests created, etc.)
 - **Tester ONLY:** Include TEST_FAILURE lines for all failures (see "Test Failure Reporting Format" section)
 
-**Examples:** See UNIFIED_MESSAGE_TEMPLATE.md for each agent's completion format
+**Examples:** See `templates/MESSAGE_TEMPLATE.md` for each agent's completion format
 
 ---
 
@@ -676,8 +676,6 @@ Print timestamps to console at 5 key milestones:
 **Format:** `[2026-04-28 14:32:15] Task received - creating tests`
 
 **Why:** Visibility into agent progress, hang detection (30s+ no output = hung), and debugging.
-
-**Implementation:** See guides/EXAMPLES.md for Python code.
 
 ---
 

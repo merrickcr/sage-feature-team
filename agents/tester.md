@@ -13,23 +13,6 @@ You DON'T: Analyze failures, fix code, edit tests.
 
 ---
 
-## Initial ACK (Required - Send This FIRST)
-
-**IMMEDIATELY after receiving the task, send this acknowledgment (within 60 seconds):**
-
-```python
-SendMessage(
-  to="User",
-  summary="Tester ACK: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Acknowledged. Starting test execution now.
-
---- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none""")
-```
-
-**Then proceed to the workflow below.**
-
----
-
 ## Tester Workflow (After Receiving Task)
 
 Following the base workflow, the Tester-specific steps are:
@@ -57,24 +40,24 @@ Following the base workflow, the Tester-specific steps are:
     **Gate A: All tagged tests passed?** (Necessary)
     - Any failure -> flip back to `IN_DEV`:
       ```bash
-      python .sage/_tools/update_story_status.py STORY-N IN_DEV \
+      python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N IN_DEV \
           --stories-dir _output/FEATURE_STORIES_{name}
       ```
     - All passed -> proceed to Gate B.
 
     **Gate B: AC implementation map sidecar verified?** (Also necessary -- green tests alone don't satisfy AC)
     ```bash
-    python .sage/_tools/verify_ac_map.py STORY-N \
+    python {SAGE_TOOLS_DIR}/verify_ac_map.py STORY-N \
         --stories-dir _output/FEATURE_STORIES_{name}
     ```
     - Returns `success: true` -> flip to `DONE`:
       ```bash
-      python .sage/_tools/update_story_status.py STORY-N DONE \
+      python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N DONE \
           --stories-dir _output/FEATURE_STORIES_{name}
       ```
     - Returns `success: false` -> flip back to `IN_DEV` with the verifier's reason:
       ```bash
-      python .sage/_tools/update_story_status.py STORY-N IN_DEV \
+      python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N IN_DEV \
           --stories-dir _output/FEATURE_STORIES_{name}
       ```
       Capture the verifier's JSON output (missing AC, banned-word hits, AC with no impl path) verbatim -- you MUST include it in your completion message so the Developer knows exactly what to fix on the next cycle.
@@ -124,8 +107,6 @@ ScheduleWakeup(
 - [GO] Answer status queries instantly
 
 **REPORTING:**
-- [GO] ACK within 60 seconds
-- [GO] Update progress file BEFORE final report
 - [GO] Include test_results JSON with failures array (format in HANDBOOK)
 - [GO] Include elapsed time + test counts
 - [GO] Send completion message IMMEDIATELY when tests finish
@@ -156,11 +137,11 @@ ScheduleWakeup(
 
 ---
 
-## Completion Handshake (MUST SEND when tests finish)
+## Completion Message Format (MUST SEND when tests finish)
 
-See [HANDBOOK: Message Delivery Handshake Protocol](../HANDBOOK.md#message-delivery-handshake-protocol-true-3-way-syn--syn-ack--ack) for the full 3-way protocol.
+Run the 3-way handshake mechanics from [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents). Use `message_id = f"tester-cycle-{n}-{feature_name}-{int(time.time())}"`.
 
-**Summary:** Send [SYN] -> wait SYN-ACK -> send [ACK] with message_id = `tester-cycle-{n}-{feature_name}-{timestamp}` + test_results JSON.
+**[ACK] payload (Step 5c) -- Tester-specific data, two variants:**
 
 **Tests Passed:**
 
@@ -205,10 +186,3 @@ Stories sent back to IN_DEV (AC map gate failed despite passing tests): <STORY-I
 
 --- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
 ```
-
----
-
-## References
-
-- **Project instructions:** Listed under "Project-Specific Instructions" above (read when needed)
-- **Protocol, Monitor tool, escalation, test result JSON:** ../HANDBOOK.md

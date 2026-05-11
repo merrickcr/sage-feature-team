@@ -111,7 +111,6 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 | `templates/MESSAGE_TEMPLATE.md` | Standard SendMessage format |
 | `templates/PROGRESS_TEMPLATE.md` | Progress file template |
 | `guides/ORCHESTRATOR_PATTERNS.md` | Reusable Skill/Team Lead patterns |
-| `references/ROUTING_REFERENCE.md` | Routing decision tree |
 | `examples/chatbot/.sage/` | Reference `.sage/` configs for the chatbot project |
 | `.claude/skills/sage-feature-team/SKILL.md` | Full team workflow (PO -> TestCreator -> Developer <-> Tester) |
 | `.claude/skills/sage-dev-test/SKILL.md` | Dev/test cycles only (Developer + Tester team) |

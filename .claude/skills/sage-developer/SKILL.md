@@ -8,6 +8,8 @@ when_to_use: When you want to implement code for a story whose tests already exi
 
 You ARE the Developer for this invocation. Run the role inline in this conversation -- no team, no SendMessage, no [SYN]/[ACK] handshake, no ACK protocol. Speak to the user directly.
 
+> **Path note:** All `python .sage/_tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead.
+
 ---
 
 ## Step 1: Parse Input
@@ -28,10 +30,8 @@ Compute:
 ## Step 2: Load Rendered Developer Prompt
 
 ```bash
-python _tools/load_agents.py full
+python .sage/_tools/load_agents.py full
 ```
-
-(Or `python .sage/_tools/load_agents.py full` from inside an installed project.)
 
 From the JSON, extract `agents.Developer`. **Read this rendered prompt as your role context** -- especially the "Project-Specific Instructions" section (code conventions, file structure).
 
@@ -105,7 +105,6 @@ Following the Developer role file (already rendered in Step 2):
    ```bash
    python .sage/_tools/verify_ac_map.py STORY-N --stories-dir <stories_dir>
    ```
-   (Use `_tools/verify_ac_map.py` if running from the sage-feature-team source itself.)
    If `success: false`, fix the gaps it reports (actually wire the missing AC, or escalate if an AC truly belongs in another story) BEFORE flipping to TESTING.
 8. **Flip `target_story` to `TESTING`** via the helper script -- only after the AC map verifies clean:
    ```bash
