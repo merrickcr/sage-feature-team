@@ -20,13 +20,13 @@ Tests should:
 Following the base workflow from _BASE.md:
 
 3. **Read the specification and ALL story YAMLs** from provided paths
-   - Spec: `_output/FEATURE_SPEC_{name}.md` (feature-level context -- overview, edge cases, tech notes)
-   - Stories dir: `_output/FEATURE_STORIES_{name}/STORY-*.yaml` (one file per story; `acceptance_criteria` lives inside each story)
+   - Spec: `_output/{name}/spec.md` (feature-level context -- overview, edge cases, tech notes)
+   - Stories dir: `_output/{name}/stories/STORY-*.yaml` (one file per story; `acceptance_criteria` lives inside each story)
 4. **Determine target stories** -- task message may name specific story IDs; otherwise, target every story whose YAML has `status: TODO` AND every entry in its `dependencies:` resolves to a story whose YAML has `status: DONE`
 5. **Flip target stories to `CREATE_TESTS`** using the helper script (NEVER edit story YAMLs directly):
    ```bash
    python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N CREATE_TESTS \
-       --stories-dir _output/FEATURE_STORIES_{name}
+       --stories-dir _output/{name}/stories
    ```
    The helper does an atomic, locked YAML update -- concurrent workers won't trample each other. Check the JSON return value; if `success: false`, escalate.
 6. **Consult project instructions** -- Read referenced files for test structure, naming, framework
@@ -36,7 +36,7 @@ Following the base workflow from _BASE.md:
 8. **Flip target stories from `CREATE_TESTS` to `IN_DEV`** using the helper script:
    ```bash
    python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N IN_DEV \
-       --stories-dir _output/FEATURE_STORIES_{name}
+       --stories-dir _output/{name}/stories
    ```
 9. **Update progress file** -- Mark Tests: DONE, list test function names AND story IDs covered, AND list any stub-test files written (see "Tests You Cannot Write at Your Seam" below)
 10. **Complete the 3-way handshake** (see [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))

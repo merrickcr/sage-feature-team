@@ -45,7 +45,7 @@ Failing tests from Cycle 1:
 - test_login: Expected 200, got 401
 - test_register: Expected 201, got 500
 
-Spec: _output/FEATURE_SPEC_auth_system.md
+Spec: _output/auth_system/spec.md
 Test file: tests/test_auth_system.py
 
 --- STATUS: TASK_ASSIGNED | READY: N/A | BLOCKER: none

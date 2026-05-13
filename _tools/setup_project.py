@@ -12,6 +12,10 @@ What it copies (always overwritten on re-run):
   _tools/load_agents.py                -> <project>/.sage/_tools/load_agents.py
   _tools/update_story_status.py        -> <project>/.sage/_tools/update_story_status.py
   _tools/verify_ac_map.py              -> <project>/.sage/_tools/verify_ac_map.py
+  _tools/extract_token_usage.py        -> <project>/.sage/_tools/extract_token_usage.py
+  _tools/record_worker_usage.py        -> <project>/.sage/_tools/record_worker_usage.py
+  _tools/discover_and_record.py        -> <project>/.sage/_tools/discover_and_record.py
+  _tools/list_eligible.py              -> <project>/.sage/_tools/list_eligible.py
   HANDBOOK.md                          -> <project>/.sage/HANDBOOK.md
   sage-config.SCHEMA.md                -> <project>/.sage/sage-config.SCHEMA.md
   templates/                           -> <project>/.sage/templates/
@@ -58,6 +62,10 @@ SAGE_FILES = [
     ("_tools/load_agents.py",                    "_tools/load_agents.py"),
     ("_tools/update_story_status.py",            "_tools/update_story_status.py"),
     ("_tools/verify_ac_map.py",                  "_tools/verify_ac_map.py"),
+    ("_tools/extract_token_usage.py",            "_tools/extract_token_usage.py"),
+    ("_tools/record_worker_usage.py",            "_tools/record_worker_usage.py"),
+    ("_tools/discover_and_record.py",            "_tools/discover_and_record.py"),
+    ("_tools/list_eligible.py",                  "_tools/list_eligible.py"),
     ("HANDBOOK.md",                              "HANDBOOK.md"),
     ("sage-config.SCHEMA.md",                    "sage-config.SCHEMA.md"),
     ("templates/MESSAGE_TEMPLATE.md",            "templates/MESSAGE_TEMPLATE.md"),
@@ -89,6 +97,10 @@ SKILL_PATH_REWRITES = [
     ("python _tools/load_agents.py",                          "python .sage/_tools/load_agents.py"),
     ("python _tools/update_story_status.py",                  "python .sage/_tools/update_story_status.py"),
     ("python _tools/verify_ac_map.py",                        "python .sage/_tools/verify_ac_map.py"),
+    ("python _tools/extract_token_usage.py",                  "python .sage/_tools/extract_token_usage.py"),
+    ("python _tools/record_worker_usage.py",                  "python .sage/_tools/record_worker_usage.py"),
+    ("python _tools/discover_and_record.py",                  "python .sage/_tools/discover_and_record.py"),
+    ("python _tools/list_eligible.py",                        "python .sage/_tools/list_eligible.py"),
     ("`HANDBOOK.md`",                                         "`.sage/HANDBOOK.md`"),
     ("`sage-config.SCHEMA.md`",                               "`.sage/sage-config.SCHEMA.md`"),
     ("`guides/",                                              "`.sage/guides/"),
@@ -101,6 +113,10 @@ SKILL_PATH_REWRITES = [
     ("`_tools/load_agents.py`",                               "`.sage/_tools/load_agents.py`"),
     ("`_tools/update_story_status.py`",                       "`.sage/_tools/update_story_status.py`"),
     ("`_tools/verify_ac_map.py`",                             "`.sage/_tools/verify_ac_map.py`"),
+    ("`_tools/extract_token_usage.py`",                       "`.sage/_tools/extract_token_usage.py`"),
+    ("`_tools/record_worker_usage.py`",                       "`.sage/_tools/record_worker_usage.py`"),
+    ("`_tools/discover_and_record.py`",                       "`.sage/_tools/discover_and_record.py`"),
+    ("`_tools/list_eligible.py`",                             "`.sage/_tools/list_eligible.py`"),
     ("`examples/chatbot/.sage/sage-tester-config.yaml`",      "`.sage/sage-tester-config.yaml`"),
     ("`examples/chatbot/.sage/`",                             "`.sage/`"),
 ]

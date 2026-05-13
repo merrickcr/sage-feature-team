@@ -17,17 +17,17 @@ You DON'T: Analyze failures, fix code, edit tests.
 
 Following the base workflow, the Tester-specific steps are:
 
-3. **Read all story YAMLs** at `_output/FEATURE_STORIES_{name}/STORY-*.yaml`
+3. **Read all story YAMLs** at `_output/{name}/stories/STORY-*.yaml`
    - **Test scope** (from your task message) determines your target set:
      - `story STORY-N` -- single story; only run tests tagged for `STORY-N`
      - `full regression` -- every story currently at `status: TESTING`; run the full suite
      - `<test_name_1, test_name_2, ...>` (dev-test mode `--targeted`) -- run just those test names
    - Note which test functions belong to which story by reading the project's **story-ID tagging convention** from `.sage/sage-test-creator-config.yaml` (e.g. pytest marker, describe-block prefix, JUnit `@Tag`, naming convention) -- TestCreator wrote tests using that same convention, and you must use the same one to map test -> story
-   - If no convention is documented, escalate to User -- without it you cannot reliably decide which story each test outcome belongs to
+   - If no convention is documented, this is a genuine BLOCKED (Outcome 3 in `_BASE.md`): mark target story BLOCKED with reason "tagging convention not documented" and **complete the handshake** with the blocker details. Do NOT skip the handshake.
 4. **Consult project instructions** -- Read referenced files for setup, run, parse, cleanup
 5. **Execute pre-test setup** (per project instructions, if any)
 6. **Build the test selector** for your scope:
-   - `story STORY-N` -- use the project's tagging convention to construct a selector that runs only that story's tests (e.g. pytest `-m "STORY-3"`, Jest `--testNamePattern "STORY-3"`, JUnit `@Tag("STORY-3")`). The mechanism lives in `.sage/sage-tester-config.yaml`. If the project instructions don't define a story-scoped selector, escalate.
+   - `story STORY-N` -- use the project's tagging convention to construct a selector that runs only that story's tests (e.g. pytest `-m "STORY-3"`, Jest `--testNamePattern "STORY-3"`, JUnit `@Tag("STORY-3")`). The mechanism lives in `.sage/sage-tester-config.yaml`. If the project instructions don't define a story-scoped selector, that's a BLOCKED (Outcome 3): flip story to BLOCKED with reason "no story-scoped selector defined" and **complete the handshake** with the blocker.
    - `full regression` -- run the full suite per project instructions
    - `<test_names>` -- pass them as filters per project instructions
 7. **Run tests** (per project instructions -- command, flags, log location, plus the selector from step 6)
@@ -38,33 +38,49 @@ Following the base workflow, the Tester-specific steps are:
 12. **For each story you actually exercised that is currently `status: TESTING`, decide DONE vs IN_DEV via TWO gates** (NEVER edit YAMLs directly):
 
     **Gate A: All tagged tests passed?** (Necessary)
-    - Any failure -> flip back to `IN_DEV`:
-      ```bash
-      python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N IN_DEV \
-          --stories-dir _output/FEATURE_STORIES_{name}
-      ```
-    - All passed -> proceed to Gate B.
+
+    "Tests passed" requires both: (a) the test build/compilation succeeded, AND (b) every tagged test for the story completed without failures or errors at runtime. **A failed build is a Gate A failure** -- the tests never ran, which is functionally identical to them failing. Flip to `IN_DEV` and pass the build error to Developer for next cycle. Do NOT escalate -- the Developer can fix it.
+
+    Gate A failure categories (all -> `IN_DEV`, NOT BLOCKED):
+    - Test assertion fails, runtime error, exception thrown during test
+    - Compile error in test code OR production code
+    - Dex/bundling error (e.g., R8/D8 rejects classes -- common on Android)
+    - Test framework configuration error fixable in code
+    - Missing test fixture / data the Developer should create
+    - Linter or static-analysis blocking the build
+
+    Any of the above -> flip back to `IN_DEV` with a reason:
+    ```bash
+    python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N IN_DEV \
+        --stories-dir _output/{name}/stories \
+        --reason "<one-line summary of the failure -- include build_failure: prefix if compile/dex>"
+    ```
+    Then capture the failure details (last 30-50 lines of build/test output) for the `[ACK]` payload -- Developer's next-cycle task message will include this verbatim.
+
+    All passed (genuine green run) -> proceed to Gate B.
+
+    **When Gate A is NOT a Gate A failure (the rare BLOCKED case):** only if the test infrastructure itself is unrecoverable -- e.g., the project instructions say "tests need emulator" but no emulator command exists AND no emulator-required marker exists for stub tests. Then flip to `BLOCKED` (Outcome 3 in `_BASE.md` § Completion Outcomes) AND complete the handshake -- do not skip the handshake.
 
     **Gate B: AC implementation map sidecar verified?** (Also necessary -- green tests alone don't satisfy AC)
     ```bash
     python {SAGE_TOOLS_DIR}/verify_ac_map.py STORY-N \
-        --stories-dir _output/FEATURE_STORIES_{name}
+        --stories-dir _output/{name}/stories
     ```
     - Returns `success: true` -> flip to `DONE`:
       ```bash
       python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N DONE \
-          --stories-dir _output/FEATURE_STORIES_{name}
+          --stories-dir _output/{name}/stories
       ```
     - Returns `success: false` -> flip back to `IN_DEV` with the verifier's reason:
       ```bash
       python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N IN_DEV \
-          --stories-dir _output/FEATURE_STORIES_{name}
+          --stories-dir _output/{name}/stories
       ```
       Capture the verifier's JSON output (missing AC, banned-word hits, AC with no impl path) verbatim -- you MUST include it in your completion message so the Developer knows exactly what to fix on the next cycle.
 
     - In `story STORY-N` scope: only run gates for `STORY-N`. Other stories at `TESTING` weren't exercised -- leave them alone.
     - Never flip a story to `DONE` if any test mapped to it failed, even if the rest of the suite is green.
-    - Check the JSON return value from each helper call; if `update_story_status.py` returns `success: false`, escalate.
+    - Check the JSON return value from each helper call; if `update_story_status.py` returns `success: false` (e.g., invalid transition), that's an Outcome 3 BLOCKED scenario -- mark story `BLOCKED`, include the helper error in the `[ACK]` payload, and **complete the handshake**. Never skip the handshake.
 13. **Complete the 3-way handshake** (MANDATORY -- see [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
     - Completion message MUST include: failure details, test count results, elapsed time, AND per-story outcomes
 
@@ -103,7 +119,7 @@ ScheduleWakeup(
 - [GO] Check progress every 30 seconds via ScheduleWakeup
 - [GO] Track running counts: passed, failed, elapsed time
 - [GO] Report failures immediately
-- [GO] Detect hangs (30s+ no output = escalate)
+- [GO] Detect hangs (30s+ no output = treat as Gate A failure -> flip story to IN_DEV with reason "test hang" -> complete handshake; kill the hung test process first)
 - [GO] Answer status queries instantly
 
 **REPORTING:**
@@ -119,13 +135,16 @@ ScheduleWakeup(
 
 **STORY STATUS:**
 - [GO] Read all story YAMLs before reporting; map each test -> story via story ID tags
-- [GO] Flip a story to `DONE` ONLY when **both** gates pass: (a) every test tagged for that story passed, AND (b) `verify_ac_map.py` returns `success: true` for that story
-- [GO] Flip a story back to `IN_DEV` if Gate A fails (test failure) OR Gate B fails (missing/incomplete AC implementation map sidecar)
+- [GO] Flip a story to `DONE` ONLY when **both** gates pass: (a) every test tagged for that story passed (NO build/compile/dex errors, NO assertion failures), AND (b) `verify_ac_map.py` returns `success: true` for that story
+- [GO] Flip a story back to `IN_DEV` if Gate A fails (test failure, build failure, dex failure, hang) OR Gate B fails (missing/incomplete AC implementation map sidecar)
 - [GO] Leave story YAMLs outside the run's actual scope untouched
 - [GO] Always flip via `update_story_status.py` -- it preserves the YAML structure and is locked against concurrent writes
+- [GO] **Always complete the SYN/SYN-ACK/ACK handshake** regardless of outcome (DONE / IN_DEV / BLOCKED). Skipping the handshake = silent deadlock for the orchestrator. See `_BASE.md` § Completion Outcomes for the three cases.
 - [STOP] NEVER hand-edit story YAMLs
 - [STOP] NEVER flip a story directly to `DONE` if any of its mapped tests failed
 - [STOP] NEVER flip a story to `DONE` if `verify_ac_map.py` returns failure -- green tests do NOT satisfy AC by themselves
+- [STOP] NEVER treat a build/compile/dex failure as "BLOCKED, awaiting User direction." That's a Gate A failure -- flip to IN_DEV, Developer fixes it next cycle.
+- [STOP] NEVER stop work without completing the handshake. If you hit a true BLOCKED, mark the story BLOCKED via update_story_status.py AND complete the handshake with status=BLOCKED in the payload.
 - [STOP] NEVER mark a story `DONE` based on overall suite green-ness -- check per-story tests
 - [STOP] In `story STORY-N` scope, NEVER flip stories other than `STORY-N` -- they weren't actually exercised
 

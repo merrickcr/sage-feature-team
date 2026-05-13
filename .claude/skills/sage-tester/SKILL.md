@@ -30,6 +30,8 @@ Compute:
 
 ---
 
+---
+
 ## Step 2: Load Rendered Tester Prompt (for project instructions and role contract)
 
 ```bash
@@ -57,13 +59,13 @@ If `success` is false, surface the loader's `error` and stop.
 
 If `feature_name` was passed via `--feature`, use it directly. Otherwise:
 
-1. List directories matching `<output_dir>/FEATURE_STORIES_*/` (output_dir from sage-config.yaml; default `_output`)
-2. **Zero matches** -> tell the user: "No FEATURE_STORIES_<feature>/ directory found." Stop.
+1. List directories matching `<output_dir>/*/stories/` (output_dir from sage-config.yaml; default `_output`)
+2. **Zero matches** -> tell the user: "No <feature>/stories/ directory found." Stop.
 3. **Exactly one match** -> use it; extract `feature_name` from the directory name
 4. **Multiple matches** -> show the list to the user and ask which feature to work on. Wait for their answer before continuing.
 
 Compute:
-- `stories_dir = <output_dir>/FEATURE_STORIES_<feature_name>/`
+- `stories_dir = <output_dir>/<feature_name>/stories/`
 
 ---
 
@@ -77,9 +79,11 @@ Read every YAML file in `stories_dir`.
   - If `IN_DEV` or earlier: tell the user the story isn't ready for testing -- suggest `/sage-developer <story>` first; offer to abort or proceed anyway.
   - If `DONE`: ask whether to re-test it (regression check), switch story, or abort.
 
-**If no story was given (auto-pick):**
-- Find the first story (lowest STORY-N) at `status: TESTING`.
-- If none qualify and `--full` was not given: tell the user the current state and stop. Suggest `/sage-developer` to advance an `IN_DEV` story to `TESTING`.
+**If no story was given (auto-pick):** call the eligibility script:
+```bash
+python .sage/_tools/list_eligible.py --feature <feature_name>
+```
+Take the first story from the `Tester` list (already sorted lowest STORY-N first). If empty and `--full` was not given, show the user the bucketing and stop. Suggest `/sage-developer` to advance an `IN_DEV` story to `TESTING`.
 
 Set `target_story` to the chosen story ID (may be null if `--full` was given without a story).
 
@@ -106,10 +110,21 @@ If `scope == "story"`: also use the convention to construct the test selector fo
 7. **For each story you actually exercised that was at `TESTING`, run TWO gates** before deciding DONE vs IN_DEV (NEVER edit YAMLs directly):
 
    **Gate A: All tagged tests passed?** (Necessary)
-   - Any failure -> flip back to `IN_DEV`:
-     ```bash
-     python .sage/_tools/update_story_status.py STORY-N IN_DEV --stories-dir <stories_dir>
-     ```
+
+   "Tests passed" requires BOTH a successful build AND all tagged tests returning green. **Build/compile/dex failures are Gate A failures, not blockers.** Any of the following -> flip back to `IN_DEV`:
+   - Test assertion fail, runtime error, exception during a test
+   - Compile error in test or production code
+   - Dex/bundling error (R8/D8 rejection, etc.)
+   - Test hang (kill the process, treat as failure)
+   - Missing fixture/test data the Developer should provide
+
+   ```bash
+   python .sage/_tools/update_story_status.py STORY-N IN_DEV --stories-dir <stories_dir> \
+       --reason "<one-line summary; prefix build_failure: when compile/dex>"
+   ```
+
+   Capture the last 30-50 lines of build/test output for the user-facing report.
+
    - All passed -> proceed to Gate B.
 
    **Gate B: AC implementation map sidecar verified?** (Also necessary -- green tests alone do NOT satisfy AC)
@@ -158,3 +173,16 @@ AC map failures (per story sent back for AC-map gap):
 - Does not write or fix code (use `/sage-developer` after a failure)
 - Does not loop through fix->test cycles (use `/sage-dev-test` for that, or rerun this skill manually)
 - Does not create a progress file
+
+
+---
+
+## Token Tracking (Record)
+
+After reporting to the user, record this skill's estimated token consumption:
+
+```bash
+python .sage/_tools/record_worker_usage.py     --feature <feature_name> --role Tester --story <target_story> --cycle 1     --inline --output-chars <approximate output chars produced>
+```
+
+Inline-mode entries are flagged `estimated: true` in `_output/<feature_name>/tokens.json` because we can't measure exact tokens from inside the main conversation (use `/usage` for the precise session total). Estimate `output-chars` as roughly the size of files you wrote + your final user-facing report. Failure here is non-fatal -- log and continue.

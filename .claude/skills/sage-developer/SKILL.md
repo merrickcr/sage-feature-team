@@ -27,6 +27,8 @@ Compute:
 
 ---
 
+---
+
 ## Step 2: Load Rendered Developer Prompt (for project instructions and role contract)
 
 ```bash
@@ -55,14 +57,14 @@ If `success` is false, surface the loader's `error` and stop.
 
 If `feature_name` was passed via `--feature`, use it directly. Otherwise:
 
-1. List directories matching `<output_dir>/FEATURE_STORIES_*/` (output_dir from sage-config.yaml; default `_output`)
-2. **Zero matches** -> tell the user: "No FEATURE_STORIES_<feature>/ directory found. Run /sage-po and /sage-test-creator first." Stop.
+1. List directories matching `<output_dir>/*/stories/` (output_dir from sage-config.yaml; default `_output`)
+2. **Zero matches** -> tell the user: "No <feature>/stories/ directory found. Run /sage-po and /sage-test-creator first." Stop.
 3. **Exactly one match** -> use it; extract `feature_name` from the directory name
 4. **Multiple matches** -> show the list to the user and ask which feature to work on. Wait for their answer before continuing.
 
 Compute:
-- `stories_dir = <output_dir>/FEATURE_STORIES_<feature_name>/`
-- `spec_file   = <output_dir>/FEATURE_SPEC_<feature_name>.md`
+- `stories_dir = <output_dir>/<feature_name>/stories/`
+- `spec_file   = <output_dir>/<feature_name>/spec.md`
 
 ---
 
@@ -76,9 +78,11 @@ Read every YAML file in `stories_dir` and `spec_file` (for feature-level context
   - If `TODO` or `CREATE_TESTS`: tell the user no tests exist yet -- suggest `/sage-test-creator <story>` first; offer to abort or proceed anyway.
   - If `TESTING` or `DONE`: tell the user the story is past Developer's scope; ask whether to re-implement, switch story, or abort.
 
-**If no story was given (auto-pick):**
-- Find the first story (lowest STORY-N) at `status: IN_DEV`.
-- If none qualify: tell the user the current state and stop. Likely next steps: `/sage-test-creator` to advance a `TODO` story to `IN_DEV`, or `/sage-tester` to validate stories at `TESTING`.
+**If no story was given (auto-pick):** call the eligibility script:
+```bash
+python .sage/_tools/list_eligible.py --feature <feature_name>
+```
+Take the first story from the `Developer` list (already sorted lowest STORY-N first). If the list is empty, show the user the bucketing so they see why nothing's eligible, then stop. Likely next steps: `/sage-test-creator` to advance a `TODO` story to `IN_DEV`, or `/sage-tester` to validate stories at `TESTING`.
 
 Set `target_story` to the chosen story ID.
 
@@ -141,3 +145,16 @@ Summary: <one-paragraph description of what you implemented and any decisions/tr
 - Does not run tests (use `/sage-tester` next)
 - Does not loop through multiple stories -- handles exactly one per invocation
 - Does not create a progress file
+
+
+---
+
+## Token Tracking (Record)
+
+After reporting to the user, record this skill's estimated token consumption:
+
+```bash
+python .sage/_tools/record_worker_usage.py     --feature <feature_name> --role Developer --story <target_story> --cycle 1     --inline --output-chars <approximate output chars produced>
+```
+
+Inline-mode entries are flagged `estimated: true` in `_output/<feature_name>/tokens.json` because we can't measure exact tokens from inside the main conversation (use `/usage` for the precise session total). Estimate `output-chars` as roughly the size of files you wrote + your final user-facing report. Failure here is non-fatal -- log and continue.

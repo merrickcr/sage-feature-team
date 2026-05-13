@@ -27,6 +27,8 @@ Compute:
 
 ---
 
+---
+
 ## Step 2: Load Rendered TestCreator Prompt (for project instructions and role contract)
 
 ```bash
@@ -55,14 +57,14 @@ If `success` is false, surface the loader's `error` and stop.
 
 If `feature_name` was passed via `--feature`, use it directly. Otherwise:
 
-1. List directories matching `<output_dir>/FEATURE_STORIES_*/` (output_dir from sage-config.yaml; default `_output`)
-2. **Zero matches** -> tell the user: "No FEATURE_STORIES_<feature>/ directory found in <output_dir>. Run /sage-po first to create a spec and stories." Stop.
+1. List directories matching `<output_dir>/*/stories/` (output_dir from sage-config.yaml; default `_output`)
+2. **Zero matches** -> tell the user: "No <feature>/stories/ directory found in <output_dir>. Run /sage-po first to create a spec and stories." Stop.
 3. **Exactly one match** -> use it; extract `feature_name` from the directory name
 4. **Multiple matches** -> show the list to the user and ask which feature to work on. Wait for their answer before continuing.
 
 Compute:
-- `stories_dir = <output_dir>/FEATURE_STORIES_<feature_name>/`
-- `spec_file   = <output_dir>/FEATURE_SPEC_<feature_name>.md`
+- `stories_dir = <output_dir>/<feature_name>/stories/`
+- `spec_file   = <output_dir>/<feature_name>/spec.md`
 
 ---
 
@@ -76,9 +78,11 @@ Read every YAML file in `stories_dir` (and `spec_file` for feature-level context
   - If status is already past `TODO`: tell the user and ask whether to proceed anyway (use `--force` on the helper if so), pick a different story, or abort.
   - If a dep is not `DONE`: tell the user the unmet deps and ask whether to proceed anyway, switch story, or abort.
 
-**If no story was given (auto-pick):**
-- Find the first story (lowest STORY-N) where: `status: TODO` AND every entry in `dependencies:` resolves to a story with `status: DONE` (`[]` counts as satisfied).
-- If none qualify: tell the user the current state (which stories are blocked on what) and stop.
+**If no story was given (auto-pick):** call the eligibility script:
+```bash
+python .sage/_tools/list_eligible.py --feature <feature_name>
+```
+Take the first story from the `TestCreator` list (it's already sorted lowest STORY-N first). If the list is empty, show the user the `blocked_on_deps` and `all_statuses` fields so they see why nothing's eligible, then stop. **Do NOT eyeball the YAMLs yourself; trust the script's bucketing.** A dependency is satisfied only when `status == "DONE"` -- `TESTING` and `IN_DEV` don't count.
 
 Set `target_story` to the chosen story ID.
 
@@ -123,3 +127,16 @@ Stub tests (if any): <path -- marked skip; targets AC that can't run at this sea
 - Does not run Developer or Tester (use `/sage-developer` and `/sage-tester` next)
 - Does not loop through multiple ready stories -- handles exactly one per invocation
 - Does not create a progress file
+
+
+---
+
+## Token Tracking (Record)
+
+After reporting to the user, record this skill's estimated token consumption:
+
+```bash
+python .sage/_tools/record_worker_usage.py     --feature <feature_name> --role TestCreator --story <target_story> --cycle 1     --inline --output-chars <approximate output chars produced>
+```
+
+Inline-mode entries are flagged `estimated: true` in `_output/<feature_name>/tokens.json` because we can't measure exact tokens from inside the main conversation (use `/usage` for the precise session total). Estimate `output-chars` as roughly the size of files you wrote + your final user-facing report. Failure here is non-fatal -- log and continue.

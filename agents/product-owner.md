@@ -24,12 +24,12 @@ Following the base workflow, the ProductOwner-specific steps are:
 
 2. **Standardize feature name to snake_case** -- Extract, lowercase, replace spaces with underscores
    - Example: "Add Dark Mode" -> `add_dark_mode`
-   - Use this name in ALL files: `_output/FEATURE_SPEC_{name}.md`, `_output/FEATURE_STORIES_{name}/`, and progress file
-3. **Create progress file** at `_output/FEATURE_{name}_PROGRESS.md`
+   - Use this name in ALL files: `_output/{name}/spec.md`, `_output/{name}/stories/`, and progress file
+3. **Create progress file** at `_output/{name}/progress.md`
 4. **Create spec file** with: Overview, Requirements, Edge Cases, Technical Notes
    - The spec does NOT contain acceptance criteria -- those live inside their story
-5. **Create stories directory** at `_output/FEATURE_STORIES_{name}/` and write one YAML per story:
-   - File path: `_output/FEATURE_STORIES_{name}/STORY-N.yaml` (one file per story)
+5. **Create stories directory** at `_output/{name}/stories/` and write one YAML per story:
+   - File path: `_output/{name}/stories/STORY-N.yaml` (one file per story)
    - Group AC into logical, cohesive stories (a story = a coherent slice that can be built/tested together)
    - Every AC for the feature lives in exactly one story file (no duplicates, no orphans)
    - Each story file declares: id, title, status (initially `TODO`), dependencies, description, acceptance_criteria
@@ -65,7 +65,7 @@ One-paragraph summary.
 
 ## Story Format (YAML -- one file per story)
 
-File path: `_output/FEATURE_STORIES_{feature_name}/STORY-N.yaml`
+File path: `_output/{feature_name}/stories/STORY-N.yaml`
 
 ```yaml
 id: STORY-1
@@ -117,7 +117,7 @@ acceptance_criteria:
 - [RULE] **NO tests, NO code** -- Spec only
 - [RULE] Every AC for the feature lives in exactly one story file -- no orphans, no duplicates
 - [RULE] Spec file does NOT contain an Acceptance Criteria section -- AC live in the story YAMLs
-- [RULE] Each story is its own YAML file at `_output/FEATURE_STORIES_{name}/STORY-N.yaml`
+- [RULE] Each story is its own YAML file at `_output/{name}/stories/STORY-N.yaml`
 - [RULE] AC IDs (`AC1`, `AC2`, ...) are unique across the entire feature, not just within a story
 - [RULE] Story dependencies form a DAG -- no cycles
 - [RULE] All stories start with `status: TODO` at spec-approval time (status changes happen later, not here)
@@ -137,8 +137,8 @@ SendMessage(
 
 [Task: po-spec-{feature_name}]
 
-Spec file:       _output/FEATURE_SPEC_{feature_name}.md
-Stories dir:     _output/FEATURE_STORIES_{feature_name}/
+Spec file:       _output/{feature_name}/spec.md
+Stories dir:     _output/{feature_name}/stories/
 Story files:     STORY-1.yaml, STORY-2.yaml, ... ({count_stories} total)
 
 Please review and respond with: Questions/feedback OR "APPROVED"
@@ -170,8 +170,8 @@ SendMessage(
 
 [ACK] {message_id}
 
-Spec file:    _output/FEATURE_SPEC_{feature_name}.md
-Stories dir:  _output/FEATURE_STORIES_{feature_name}/
+Spec file:    _output/{feature_name}/spec.md
+Stories dir:  _output/{feature_name}/stories/
 
 Status: User approval received
 Feature overview: [Brief description]

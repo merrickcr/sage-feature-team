@@ -343,8 +343,8 @@ When you receive a message like:
 Extract the feature name: **auth_system**
 
 Use it in all file paths and references:
-- Spec file: `_output/FEATURE_SPEC_auth_system.md`
-- Progress file: `_output/FEATURE_auth_system_PROGRESS.md`
+- Spec file: `_output/auth_system/spec.md`
+- Progress file: `_output/auth_system/progress.md`
 - Test file: `tests/test_auth_system.py`
 
 ### Echo in Responses
@@ -423,7 +423,7 @@ Each phase completes before the next phase begins:
 ### Reading Progress File
 
 Before routing:
-1. Read `_output/FEATURE_[name]_PROGRESS.md`
+1. Read `_output/[name]/progress.md`
 2. Find the first incomplete phase
 3. Route to appropriate agent
 4. Do NOT skip phases
@@ -685,7 +685,7 @@ Print timestamps to console at 5 key milestones:
 
 | Agent | Input | Output | Escalation |
 |-------|-------|--------|-----------|
-| **ProductOwner** | Requirements file or user input | `_output/FEATURE_SPEC_*.md` | Ambiguous requirements |
+| **ProductOwner** | Requirements file or user input | `_output/*/spec.md` | Ambiguous requirements |
 | **TestCreator** | Spec file + progress file | `tests/test_*.py` with tests | Unclear test requirements |
 | **Developer** | Spec + test file | Modified implementation files | Same test fails 2x |
 | **Tester** | Test command from Skill | Test results report | Test hangs (30s+ no output) |
@@ -700,7 +700,7 @@ Print timestamps to console at 5 key milestones:
 - Receive requests from Skill (team lead)
 - Send updates via SendMessage to `@User:`
 - Escalate questions to User
-- Progress tracked in `_output/FEATURE_*_PROGRESS.md`
+- Progress tracked in `_output/*/progress.md`
 
 ### Solo Mode (Working directly with user)
 - Receive requests from user
@@ -718,7 +718,7 @@ Most agents work in both modes seamlessly. Just match your communication style t
 
 ### File Location & Format
 
-**Location:** `_output/FEATURE_[feature-name]_PROGRESS.md`
+**Location:** `_output/[feature-name]/progress.md`
 
 **Created by:** ProductOwner at start of workflow
 
@@ -727,7 +727,7 @@ Most agents work in both modes seamlessly. Just match your communication style t
 ### Critical Rule: Update Before Reporting
 
 **BEFORE you send your completion report, you MUST:**
-1. Read the current progress file: `_output/FEATURE_[name]_PROGRESS.md`
+1. Read the current progress file: `_output/[name]/progress.md`
 2. Find your section
 3. Update the relevant status field
 4. Save the file
@@ -752,7 +752,7 @@ Testing: PENDING | IN_PROGRESS | PASSED | FAILED
 
 ## Phase 1: Specification
 [x] Specification created
-Spec file: _output/FEATURE_SPEC_{feature_name}.md
+Spec file: _output/{feature_name}/spec.md
 Completed: [date]
 
 ## Phase 2: Test Creation
@@ -819,7 +819,7 @@ ELSE IF Testing = PASSED -> Feature complete
 
 ### Important Rules
 
-- [RULE] Location is always `_output/FEATURE_[name]_PROGRESS.md`
+- [RULE] Location is always `_output/[name]/progress.md`
 - [RULE] Status values must match exactly (case-sensitive)
 - [RULE] Update BEFORE sending completion report
 - [RULE] List test function names, not test descriptions
@@ -849,7 +849,7 @@ import time
 
 def update_progress_file_safely(feature_name, section_name, new_content):
     """Update progress file with atomic write and retry logic."""
-    progress_file = f"_output/FEATURE_{feature_name}_PROGRESS.md"
+    progress_file = f"_output/{feature_name}/progress.md"
     max_retries = 3
     
     for attempt in range(max_retries):

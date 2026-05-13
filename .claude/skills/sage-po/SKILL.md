@@ -28,6 +28,8 @@ If no feature description was provided, ask the user what feature they want.
 
 ---
 
+---
+
 ## Step 2: Load Rendered ProductOwner Prompt (for project instructions and role contract)
 
 ```bash
@@ -57,8 +59,8 @@ If `success` is false, surface the loader's `error` and stop.
 
 - Determine `output_dir` (default `_output`); create it if missing
 - Compute paths using `feature_name`:
-  - `spec_file    = <output_dir>/FEATURE_SPEC_<feature_name>.md`
-  - `stories_dir  = <output_dir>/FEATURE_STORIES_<feature_name>/`
+  - `spec_file    = <output_dir>/<feature_name>/spec.md`
+  - `stories_dir  = <output_dir>/<feature_name>/stories/`
 - If `spec_file` already exists OR `stories_dir` exists and is non-empty, ask the user: overwrite, pick a different feature_name, or abort.
 
 ---
@@ -92,3 +94,16 @@ If `success` is false, surface the loader's `error` and stop.
 - Does not run TestCreator, Developer, or Tester (use `/sage-test-creator`, `/sage-developer`, `/sage-tester` for those -- or `/sage-feature-team` for the full workflow)
 - Does not advance any story past `TODO` -- that's the next agent's job
 - Does not create a progress file -- progress files are for the team-orchestrated workflow
+
+
+---
+
+## Token Tracking (Record)
+
+After reporting to the user, record this skill's estimated token consumption:
+
+```bash
+python .sage/_tools/record_worker_usage.py     --feature <feature_name> --role ProductOwner --story - --cycle 1     --inline --output-chars <approximate output chars produced>
+```
+
+Inline-mode entries are flagged `estimated: true` in `_output/<feature_name>/tokens.json` because we can't measure exact tokens from inside the main conversation (use `/usage` for the precise session total). Estimate `output-chars` as roughly the size of files you wrote + your final user-facing report. Failure here is non-fatal -- log and continue.

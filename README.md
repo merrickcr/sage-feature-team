@@ -133,8 +133,8 @@ inline (no team, no handshake protocol -- the main conversation acts as the agen
 | `/sage-developer [STORY-N]` | Next story at `IN_DEV` | Pass `STORY-N` to target a specific story |
 | `/sage-tester [STORY-N] [--full]` | Next story at `TESTING` (story-scoped tests) | `STORY-N` to target a specific story; `--full` for regression |
 
-All four also accept `--feature <feature_name>` if multiple `FEATURE_STORIES_*.md`
-files exist in `_output/`. Otherwise, the feature is auto-detected (single match)
+All four also accept `--feature <feature_name>` if multiple feature folders
+exist under `_output/`. Otherwise, the feature is auto-detected (single match)
 or the skill asks the user (multiple matches).
 
 ---

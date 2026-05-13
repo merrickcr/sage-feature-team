@@ -39,6 +39,8 @@ When you send messages to agents below, write the message naturally with these l
 
 ---
 
+---
+
 ## Step 2: Load Agent Prompts
 
 ```bash
@@ -206,3 +208,16 @@ Recommended action: <what the user should do>
 - `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable patterns shared with `sage-feature-team`
 - `agents/developer.md`, `agents/tester.md` -- Agent role files
 - `examples/chatbot/.sage/sage-tester-config.yaml` -- Reference Tester config
+
+
+---
+
+## Token Tracking (Record)
+
+After reporting to the user, record this skill's estimated token consumption:
+
+```bash
+python .sage/_tools/record_worker_usage.py     --feature <feature_name> --role Developer --story - --cycle 1     --inline --output-chars <approximate output chars produced>
+```
+
+Inline-mode entries are flagged `estimated: true` in `_output/<feature_name>/tokens.json` because we can't measure exact tokens from inside the main conversation (use `/usage` for the precise session total). Estimate `output-chars` as roughly the size of files you wrote + your final user-facing report. Failure here is non-fatal -- log and continue.

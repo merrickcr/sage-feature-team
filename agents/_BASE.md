@@ -137,29 +137,64 @@ Then and ONLY THEN proceed to work.
 
 ---
 
-## Escalation Pattern
+## Completion Outcomes (Three Cases, Same Handshake)
 
-**If you encounter ANY question, ambiguity, or uncertainty:**
+**THE HANDSHAKE ALWAYS FIRES. Status varies; protocol does not.**
 
-1. **STOP** -- do not make assumptions
-2. **Send message** to User via SendMessage (team mode only)
-3. **Wait for response** -- do not proceed until answered
-4. **Use answer** -- incorporate guidance into your work
+Every task you receive has exactly three possible outcomes. In ALL THREE, you MUST complete the 3-way SYN/SYN-ACK/ACK handshake described above. The Team Lead is blind without it -- if you skip the handshake, the entire workflow deadlocks waiting on you.
 
-Format:
-```
-SendMessage(
-  to="User",
-  summary="[Feature: name] Need clarification",
-  message="""@User: [Feature: name] I need clarification before continuing.
+### Outcome 1: DONE (success)
 
-Question: [Your specific question]
-Context: [Why this matters for your work]
-Current interpretation: [What you're assuming]
-Options: [If applicable, possible interpretations]
+- All gates passed (tests green, AC map verified, work satisfies the role contract)
+- Story status advances to its next state (`DONE`, `IN_DEV`, etc.) via `update_story_status.py`
+- Handshake `[ACK]` payload reports the success details
 
-Waiting for user input before proceeding.""")
-```
+### Outcome 2: FAILED (recoverable -- e.g., tests failed, gate failed, code didn't compile, build broke)
+
+- These are NOT escalations. They are normal "this cycle didn't work" outcomes the orchestrator handles by re-cycling.
+- Recoverable failure category includes:
+  - **Tester:** any test failure -- assertion fail, runtime error, build/compile failure, dex error, missing dependency, environment-not-ready (transient). Build failures are NOT escalations; they're Gate A failures.
+  - **Developer:** code change broke a previously-passing test (caught by Tester in next cycle); compile fails (Tester re-cycles)
+  - **TestCreator:** test couldn't be written because spec is genuinely ambiguous (rare -- prefer Outcome 3 if truly stuck)
+  - **All:** anything the next worker in the loop can plausibly fix on a re-cycle
+- Flip the story status to the appropriate previous state (e.g., Tester flips `TESTING` -> `IN_DEV`) via `update_story_status.py` with `--reason "<one-line summary>"`
+- Handshake `[ACK]` payload includes the failure details -- the next worker will read them and act
+
+### Outcome 3: BLOCKED (truly unrecoverable without User intervention)
+
+Reserved for situations where re-cycling cannot help and the user MUST decide:
+
+- Project instructions are missing or contradictory (e.g., test framework not configured, tagging convention undefined)
+- Infrastructure totally unreachable (e.g., no emulator at all when one is required, network down, credentials missing)
+- Spec/AC contradiction that requires a spec amendment
+- Test data file missing and you don't know what it should contain
+
+For ALL OTHER failures (anything fixable by another cycle), use Outcome 2.
+
+**When you hit a genuine BLOCKER:**
+
+1. Flip the story status to `BLOCKED` via the helper script with a reason:
+   ```bash
+   python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N BLOCKED \
+       --stories-dir _output/<feature_name>/stories \
+       --reason "<one-line description; user will see this>"
+   ```
+2. **Complete the handshake** (SYN/SYN-ACK/ACK) -- same as success/failure -- with `[ACK]` payload describing the blocker:
+   ```
+   @User: [Feature: <name>] BLOCKED on STORY-N
+
+   [ACK] <message_id>
+
+   STATUS: BLOCKED | READY: yes | BLOCKER: <category>
+
+   Why: <one-paragraph explanation>
+   What user must decide: <specific question>
+   Current state: <files/configs/etc. that are relevant>
+   Recommended user action: <if applicable>
+   ```
+3. **Go IDLE after the handshake completes.** Do NOT just sit there waiting for SendMessage. The Team Lead now has the blocker info, has the story marked BLOCKED in the file, and will surface it to the User and continue scheduling other stories.
+
+**Critical rule:** if you find yourself wanting to "wait for user input without completing the handshake," that's wrong. The handshake IS how you notify both the Team Lead and the User. Skipping it = silent deadlock.
 
 Reference: [HANDBOOK: Stop on Questions - Escalate Pattern](../HANDBOOK.md#stop-on-questions---escalate-pattern-all-agents)
 
@@ -209,6 +244,8 @@ Reference: [HANDBOOK: Progress File Updates](../HANDBOOK.md#progress-file-update
 - [X] Output status updates or commentary (unless queried)
 - [X] Include work data in [SYN] message (SYN signals readiness only)
 - [X] Give up after first timeout (follow HANDBOOK retry limits)
+- [X] **Skip the handshake when you hit a blocker** -- the handshake is how you tell the Team Lead AND the User. No handshake = silent deadlock. See "Completion Outcomes" above. Always complete SYN/SYN-ACK/ACK even when reporting BLOCKED.
+- [X] Treat build/compile failures as escalations -- those are recoverable (Outcome 2). Only true infrastructure or spec-ambiguity problems are BLOCKED (Outcome 3).
 
 ---
 

@@ -45,8 +45,8 @@ You receive:
 Following the base workflow from _BASE.md:
 
 3. **Read the specification, story YAMLs, and test file** to understand requirements
-   - Spec: `_output/FEATURE_SPEC_{name}.md` (feature-level context only -- overview, edge cases, tech notes)
-   - Stories dir: `_output/FEATURE_STORIES_{name}/STORY-*.yaml` -- your target set is every story file with `status: IN_DEV` (or story IDs named explicitly in your task message). Each story's `acceptance_criteria:` block is the contract you must satisfy.
+   - Spec: `_output/{name}/spec.md` (feature-level context only -- overview, edge cases, tech notes)
+   - Stories dir: `_output/{name}/stories/STORY-*.yaml` -- your target set is every story file with `status: IN_DEV` (or story IDs named explicitly in your task message). Each story's `acceptance_criteria:` block is the contract you must satisfy.
    - Test file: provided in task message; map tests -> stories via story ID tags
 4. **Confirm target stories are `status: IN_DEV`** in their YAMLs (no status flip needed at start -- they're already there from TestCreator, or were flipped back by Tester on a re-cycle)
 5. **Consult project instructions** -- Read referenced files for code conventions, file structure
@@ -54,18 +54,18 @@ Following the base workflow from _BASE.md:
    - Make failing tests pass (without breaking passing tests)
    - For AC the tests don't cover (UI, device-only, manual-only), wire the production code anyway: composables rendered, screens reachable, buttons connected. Code that compiles in isolation but has no call site does NOT count as implemented.
 7. **Write the AC implementation map sidecar** for each target story:
-   - Path: `_output/FEATURE_STORIES_{name}/STORY-N.implementation.md`
+   - Path: `_output/{name}/stories/STORY-N.implementation.md`
    - Format and rules: see "AC Implementation Map" section below
    - This file is mandatory. The Tester refuses to mark the story DONE without it.
 8. **Verify your map locally** before signaling completion:
    ```bash
-   python {SAGE_TOOLS_DIR}/verify_ac_map.py STORY-N --stories-dir _output/FEATURE_STORIES_{name}
+   python {SAGE_TOOLS_DIR}/verify_ac_map.py STORY-N --stories-dir _output/{name}/stories
    ```
    If it returns `success: false`, fix the gaps it reports BEFORE flipping to TESTING. (Don't game it -- actually wire the missing AC.)
 9. **Flip target stories from `status: IN_DEV` to `status: TESTING`** using the helper script (NEVER edit story YAMLs directly):
    ```bash
    python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N TESTING \
-       --stories-dir _output/FEATURE_STORIES_{name}
+       --stories-dir _output/{name}/stories
    ```
    The helper does an atomic, locked YAML update. Check the JSON return value; if `success: false`, escalate.
 10. **Update progress file** -- Mark Development: DONE, list modified files AND story IDs touched
@@ -78,7 +78,7 @@ Following the base workflow from _BASE.md:
 For every story you advance from `IN_DEV` to `TESTING`, write a sidecar Markdown file at:
 
 ```
-_output/FEATURE_STORIES_{name}/STORY-N.implementation.md
+_output/{name}/stories/STORY-N.implementation.md
 ```
 
 Format:
@@ -165,8 +165,8 @@ Files changed:
 Stories advanced to TESTING: <STORY-1, STORY-3, ...>
 
 AC implementation map sidecars (one per story; verified by verify_ac_map.py):
-- _output/FEATURE_STORIES_{feature_name}/STORY-1.implementation.md (AC1, AC2, AC3 -- all wired)
-- _output/FEATURE_STORIES_{feature_name}/STORY-3.implementation.md (AC4, AC5 -- all wired)
+- _output/{feature_name}/stories/STORY-1.implementation.md (AC1, AC2, AC3 -- all wired)
+- _output/{feature_name}/stories/STORY-3.implementation.md (AC4, AC5 -- all wired)
 
 Verifier output: all sidecars passed verify_ac_map.py
 

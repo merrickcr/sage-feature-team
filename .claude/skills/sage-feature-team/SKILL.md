@@ -34,8 +34,8 @@ Agent prompt (fully rendered) -- same prompt reused for every worker of that rol
 
 Stories live as **per-story YAML files**:
 ```
-_output/FEATURE_STORIES_<feature_name>/STORY-1.yaml
-_output/FEATURE_STORIES_<feature_name>/STORY-2.yaml
+_output/<feature_name>/stories/STORY-1.yaml
+_output/<feature_name>/stories/STORY-2.yaml
 ...
 ```
 
@@ -53,11 +53,13 @@ From the user's invocation, compute these values once and reuse them throughout:
 - **max_cycles** -- from `--max-cycles N` if given, else from `sage-config.yaml` -> `limits.max_cycles` (per-story dev<->test cap)
 - **max_parallel_workers** -- from `sage-config.yaml` -> `limits.max_parallel_workers` (default 4)
 - **global_timeout_seconds** -- from `sage-config.yaml` -> `limits.global_timeout_seconds` (default 3600)
-- **spec_file** -- `<output_dir>/FEATURE_SPEC_<feature_name>.md`
-- **stories_dir** -- `<output_dir>/FEATURE_STORIES_<feature_name>/`
-- **progress_file** -- `<output_dir>/FEATURE_<feature_name>_PROGRESS.md`
+- **spec_file** -- `<output_dir>/<feature_name>/spec.md`
+- **stories_dir** -- `<output_dir>/<feature_name>/stories/`
+- **progress_file** -- `<output_dir>/<feature_name>/progress.md`
 
 **`--resume <feature_name>`** continues from existing artifacts.
+
+Also: capture `feature_start_time = now()` here. You'll use this when invoking `discover_and_record.py` so it scopes to transcripts from this run only (otherwise it'd sweep the project's entire agent history).
 
 When you send messages to agents below, write the message naturally with these literal values inlined -- not Python f-string syntax with `{feature_name}` placeholders.
 
@@ -128,15 +130,31 @@ Run **ACK + completion monitoring** (Step 8).
 - When ProductOwner asks questions: forward them to the User; relay the answer back. Don't answer for the user.
 - When ProductOwner reports the spec is ready: forward to the User: "ProductOwner has completed the spec -- please review and reply APPROVED to proceed." Wait for explicit `APPROVED`.
 
-### 5d. Shut down ProductOwner
+### 5d. Record token usage and shut down ProductOwner
 
-After ProductOwner's completion handshake, you don't need it anymore. Stop the agent task to free its slot:
+After ProductOwner's completion handshake:
 
-```python
-TaskStop(name="ProductOwner")   # or TaskList -> TaskStop by id
-```
+1. **Record token usage via discovery** (mechanical, idempotent -- doesn't depend on you remembering anything per-spawn):
+   ```bash
+   python .sage/_tools/discover_and_record.py --feature <feature_name>
+   ```
 
-If `TaskStop` isn't available or fails, leave the idle agent alone -- it won't act again without a task. Move on.
+   Discovery defaults to **current-session-only scope** -- it auto-detects which `~/.claude/projects/<slug>/<session-uuid>/` is the active one (the dir with most recent activity) and only scans that. This matches `/usage` semantics (current Claude Code session). No `--since-minutes` needed in the common case.
+
+   If multiple discrete workflow runs happened in the same Claude Code session and you want only the latest one, add `--since-minutes <ceil((now-feature_start_time)/60) + 5>` to further narrow.
+
+   Discovery walks `~/.claude/projects/<slug>/<current-session>/subagents/`, finds every sage worker transcript (filters out built-in `Explore`/`Plan`/etc. agents), reads each `.meta.json` to identify the worker, and records any not yet in `<output_dir>/<feature_name>/tokens.json`. Re-renders `<feature_name>/tokens.md`. Safe to call multiple times; existing entries are skipped. If discovery returns `success: false`, log it and continue -- never block the workflow on telemetry.
+
+2. **Shut down the agent.** The ONLY way to actually remove a teammate from the team panel is to send `shutdown_request`; the teammate responds with `shutdown_response approve=true` and their process terminates. A "you are released" plain-text message does NOT shut anyone down -- the agent stays idle in the team panel. `TaskStop` doesn't work either.
+
+   ```python
+   SendMessage(
+     to="ProductOwner",
+     message={"type": "shutdown_request", "reason": "Phase 1 complete -- spec approved, releasing"}
+   )
+   ```
+
+   Wait briefly (up to ~10s) for ProductOwner's `shutdown_response approve=true`. Their process terminates on approve and they leave the team panel. Remove `ProductOwner` from your tracked `spawned_workers` set (initialized in Step 6a). If the worker doesn't respond or sends `approve=false`, log it -- Step 9 (Disband Team) will retry shutdown for any survivors before calling `TeamDelete`.
 
 ---
 
@@ -149,26 +167,71 @@ You now own a scheduling loop. You read the stories directory, spawn per-story w
 In your own working memory (no need to write to disk), maintain:
 
 ```
-in_flight       = {}   # STORY-N -> {role, agent_name, started_at, cycle_n}
-cycle_count     = {}   # STORY-N -> int (Developer->Tester rounds completed; counts when Tester re-flips to IN_DEV)
-escalated       = set()  # STORY-Ns that hit max_cycles or are unrecoverable
-start_time      = now()
+in_flight        = {}   # STORY-N -> {role, agent_name, started_at, cycle_n}
+spawned_workers  = set()  # every worker name you've Agent()-spawned and not yet confirmed shut down (incl. ProductOwner if Phase 1 ran). Source of truth for Step 9 teardown.
+cycle_count      = {}   # STORY-N -> int (Developer->Tester rounds completed; counts when Tester re-flips to IN_DEV)
+escalated        = set()  # STORY-Ns that hit max_cycles or are unrecoverable
+start_time       = now()
 ```
+
+When you `Agent(...)` to spawn a worker, add `worker_name` to `spawned_workers`. When you confirm a worker has shut down (received `shutdown_response approve=true`), remove it.
 
 ### 6b. Scheduling rule (per scan)
 
-Read every YAML in `stories_dir`. For each story, compute eligibility:
+**At the top of every scan, run discovery to record any worker token usage that completed since the last scan:**
 
-| Story status | Deps all DONE? | In flight? | Escalated? | Action |
-|---|---|---|---|---|
-| TODO         | yes | no | no | Eligible for **TestCreator** worker |
-| CREATE_TESTS | --   | -- | -- | Already in flight (a TestCreator owns it) -- skip |
-| IN_DEV       | yes | no | no | Eligible for **Developer** worker |
-| TESTING      | yes | no | no | Eligible for **Tester** worker (story-scoped) |
-| DONE         | --   | -- | -- | Done -- skip |
-| BLOCKED      | --   | -- | -- | Skip (annotate; user can resolve) |
+```bash
+python .sage/_tools/discover_and_record.py --feature <feature_name>
+```
 
-Sort eligible stories by ID (lowest STORY-N first). Skip any story whose ID is in `in_flight` or `escalated`.
+Defaults to current Claude Code session only (auto-detected). This matches `/usage` semantics and prevents pulling in transcripts from previous interrupted runs in different sessions. No flags needed in the common case.
+
+If you want to additionally narrow to a sub-window of the current session (e.g., multiple workflow runs in the same session), pass `--since-minutes <ceil((now-feature_start_time)/60) + 5>` based on `feature_start_time` from Step 1.
+
+One call per scan. Mechanical and idempotent -- it walks the current session's subagent directory, filters out built-in `Explore`/`Plan` agents, finds every sage worker transcript, and records any not yet in `<output_dir>/<feature_name>/tokens.json`. This is the **only** mechanism by which token usage gets recorded -- no per-worker recording calls anywhere else in this skill. Re-rendering of `<feature_name>/tokens.md` happens automatically as a side effect of any new entries being added.
+
+If discovery returns `success: false`, log it and proceed -- don't block the scheduler on telemetry.
+
+---
+
+**Compute eligibility mechanically -- do NOT eyeball the YAMLs.** Call the eligibility script:
+
+```bash
+python .sage/_tools/list_eligible.py --feature <feature_name>
+```
+
+Returns JSON like:
+```json
+{
+  "success": true,
+  "TestCreator":     ["STORY-2"],            // TODO + every dep at status DONE
+  "Developer":       ["STORY-4", "STORY-5"], // IN_DEV + every dep at status DONE
+  "Tester":          ["STORY-1"],            // TESTING + every dep at status DONE
+  "in_progress":     ["STORY-7"],            // CREATE_TESTS (TestCreator owned it; resume-only)
+  "blocked_on_deps": {"STORY-3": ["STORY-1 (TESTING, needs DONE)"]},
+  "blocked":         ["STORY-6"],            // status BLOCKED
+  "done":            [],
+  "all_statuses":    {"STORY-1": "TESTING", ...}
+}
+```
+
+**The script's lists are authoritative.** Spawn workers only for stories that appear in `TestCreator`, `Developer`, or `Tester`. Never spawn for a story that's only in `blocked_on_deps`, `blocked`, `in_progress`, or `done` -- those are explicitly NOT eligible.
+
+**Critical rule the script enforces:** a dependency is satisfied **only** when its `status == "DONE"`. `TESTING` is NOT close enough. `IN_DEV` is NOT close enough. Only `DONE`. This matters on resume (e.g., you interrupted last run while STORY-1 was at TESTING): downstream TODO stories that depend on STORY-1 stay in `blocked_on_deps` until STORY-1 actually reaches DONE.
+
+After getting the JSON: skip any story whose ID is in `in_flight` (you're already running a worker for it) or `escalated` (per-story max_cycles exhausted). Sort the remaining eligible stories by ID (lowest STORY-N first).
+
+Quick reference of what the script returns vs. action:
+
+| Bucket | Action |
+|---|---|
+| `TestCreator` | Eligible -- spawn `TestCreator-<STORY-N>` |
+| `Developer`   | Eligible -- spawn `Developer-<STORY-N>` (add `-cN` on re-cycles) |
+| `Tester`      | Eligible -- spawn `Tester-<STORY-N>` (story-scoped, story-only) |
+| `in_progress` | CREATE_TESTS state -- typically left over from interrupt. Treat as in-flight. If it's stale (no real worker), flip back to TODO via `update_story_status.py` to let it re-trigger. |
+| `blocked_on_deps` | Skip. Will be re-evaluated next scan after its deps reach DONE. |
+| `blocked`     | Skip. User must resolve out-of-band (edit YAML, `--resume`). |
+| `done`        | Skip. |
 
 Available slots = `max_parallel_workers - len(in_flight)`. Spawn `min(slots, len(eligible))` workers.
 
@@ -185,6 +248,7 @@ Agent(
   team_name=team_name,
   subagent_type="general-purpose"
 )
+spawned_workers.add(worker_name)
 # wait ~2s
 SendMessage(to=worker_name, summary="...", message=<task message>)
 ```
@@ -240,16 +304,28 @@ For each completion (handshake `[ACK]+DATA` from a worker):
 
 1. **Run the standard handshake** (Step 8 / `HANDBOOK.md`): reply `[SYN-ACK]`, accept `[ACK]+DATA`, send a routing message that acts as the implicit final ACK. The routing message can simply be: `@<worker>: Acknowledged. You are released -- shutting down.`
 2. **Re-read the completed story's YAML** to learn its new status (the worker already flipped it via `update_story_status.py`).
-3. **Update bookkeeping:**
-   - If the worker was Tester and the story is now `IN_DEV`: `cycle_count[STORY-N] += 1`. The Tester's completion message tells you *why* it sent the story back -- either Gate A (test failure) or Gate B (AC implementation map gate). **You don't need to re-verify the AC map yourself -- Tester is the gatekeeper for DONE, and trust its verdict.** Carry the failure details forward (test failures and/or `verify_ac_map.py` JSON) into the next Developer task message for this story so the Developer can fix the right thing. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and report a per-story escalation (Step 6f).
-   - If the worker was Tester and the story is now `DONE`: both gates passed. Nothing more to do for this story.
-   - If the worker was TestCreator and the story is now `IN_DEV`: ready for Developer next scan. (TestCreator may also have written stub tests for AC its seam can't cover -- those force the Developer to wire production code that the stubs target. The AC-map gate then catches whether wiring actually happened.)
-   - If the worker was Developer and the story is now `TESTING`: ready for Tester next scan. (Developer will not have flipped the story without first running `verify_ac_map.py` and getting success -- the Tester re-runs the same check anyway as Gate B.)
-4. **Shut down the worker** to free the slot:
+3. **Update bookkeeping based on the new story status:**
+   - **Story is now `IN_DEV`** (from Tester or via re-cycle):
+     - `cycle_count[STORY-N] += 1`. The Tester's `[ACK]` payload tells you *why* it sent the story back -- Gate A (test/build/compile/dex failure) or Gate B (AC implementation map gate). **Trust the verdict; don't re-verify.** Carry the failure details forward (failing test list, build error excerpt, or `verify_ac_map.py` JSON) into the next Developer task message verbatim. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and run per-story escalation (Step 6f).
+   - **Story is now `DONE`** (from Tester): both gates passed. Nothing more for this story.
+   - **Story is now `TESTING`** (from Developer): ready for Tester next scan. (Developer will not have flipped without first running `verify_ac_map.py` and getting success.)
+   - **Story is now in a state implying TestCreator finished** (was `TODO`/`CREATE_TESTS`, now `IN_DEV` from TestCreator): ready for Developer next scan. TestCreator may also have written stub tests for AC its seam can't cover.
+   - **Story is now `BLOCKED`** (any worker reported Outcome 3 -- truly unrecoverable): the worker already marked it BLOCKED via `update_story_status.py` and included a blocker reason in its `[ACK]` payload. **Don't try to fix it or re-cycle.** Add to `escalated`, log the blocker, surface to User immediately:
+     ```
+     @User: [Feature: <feature_name>] STORY-N marked BLOCKED by <Role>
+     Reason: <blocker reason from [ACK] payload>
+     Details: <relevant context from worker's report>
+     Continuing other stories. Resolve this one out-of-band (edit spec, fix config, etc.) and re-run with --resume.
+     ```
+     Continue the scheduler -- one BLOCKED story doesn't stop the rest.
+4. **Shut down the worker** to actually remove it from the team panel:
    ```python
-   TaskStop(name=worker_name)
+   SendMessage(
+     to=worker_name,
+     message={"type": "shutdown_request", "reason": "task complete -- releasing worker"}
+   )
    ```
-   (If TaskStop is unavailable, the idle worker won't act again -- moving on is fine.)
+   Wait briefly (up to ~10s) for the worker's `shutdown_response approve=true`. Their process terminates on approve and they disappear from the team panel. Once confirmed, remove `worker_name` from `spawned_workers`. If they don't respond or send `approve=false`, log the worker name -- Step 9 (Disband Team) will retry shutdown for any survivors at the end of the workflow. **Never skip this step**: without it, the worker stays idle in the team panel indefinitely. (Note: `TaskStop` does NOT remove agents from the team panel -- only `shutdown_request` does.)
 5. **Remove from `in_flight`** and re-run the scheduling rule (6b) to pick up newly eligible stories.
 
 ### 6f. Per-story escalation
@@ -271,9 +347,8 @@ At the top of every scan, check `now() - start_time >= global_timeout_seconds`. 
 
 - Stop spawning new workers
 - Wait briefly (one more tick) for in-flight workers to complete naturally
-- Then `TaskStop` any still-running workers
 - Mark every still-non-DONE story as `BLOCKED` with reason `global_timeout`
-- Jump to Step 7 (Final Report) with `Status: GLOBAL_TIMEOUT`
+- Jump to Step 7 (Final Report) with `Status: GLOBAL_TIMEOUT`, then **Step 9 (Disband Team)** -- the catch-all that sends `shutdown_request` to every surviving worker in `spawned_workers` and calls `TeamDelete`.
 
 ### 6h. Loop exit
 
@@ -285,6 +360,9 @@ The scheduler loop exits cleanly when:
 ---
 
 ## Step 7: Final Report
+
+Worker token usage was recorded incrementally by `discover_and_record.py` at every scheduling scan (Step 6b). The orchestrator's own main-conversation cost isn't tracked in the per-feature TOKENS file -- it's part of the user's session total (visible via Claude Code's `/usage` command).
+
 
 ### Success (Full Mode, all stories DONE)
 
@@ -340,7 +418,7 @@ Stories left: ...
 | 0-30s | Wait for `STATUS: ACKNOWLEDGED` |
 | 30s | If no ACK, send: `@<worker>: Did you receive my message?` |
 | 45s | If no ACK, send: `@<worker>: Please send ACK when ready.` |
-| 60s | If no ACK, **escalate**: shut down the worker, mark its story `BLOCKED` with reason `ack_timeout`, continue scheduling |
+| 60s | If no ACK, **escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "ack_timeout"})`, mark its story `BLOCKED` with reason `ack_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling |
 
 Use `ScheduleWakeup` so you don't block while waiting; or use `Monitor` on the team to receive worker messages reactively.
 
@@ -352,7 +430,7 @@ After ACK:
 |---|---|
 | 0-`timeout_work_hard`s (default 480s = 8min) | Wait for completion |
 | `timeout_work_hard / 2` | Send a gentle status check |
-| `timeout_work_hard` | **Escalate**: shut down the worker, mark its story `BLOCKED` with reason `work_timeout`, continue scheduling |
+| `timeout_work_hard` | **Escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "work_timeout"})`, mark its story `BLOCKED` with reason `work_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling |
 
 ### Handshake (Team Lead side)
 
@@ -360,11 +438,39 @@ When a worker sends `[SYN] <message_id>`:
 1. Within 1-2s, reply `[SYN-ACK] <same message_id>`
 2. Wait for `[ACK] <same message_id>` + completion data
 3. Process the data (re-read story YAML)
-4. Send the routing/release message -- this acts as the implicit final ACK and tells the worker it's released
-5. `TaskStop` the worker to free the slot
+4. Send the routing acknowledgment message -- plain-text acknowledgment of receipt (NOT itself a shutdown)
+5. Send `shutdown_request` to actually terminate the worker: `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "task complete"})`. Wait for `shutdown_response approve=true` -- their process terminates on approve. Remove the worker from `spawned_workers`. **`TaskStop` does NOT terminate teammate agents in the panel -- only `shutdown_request` does.**
 6. Track processed message IDs; on duplicate `[SYN]` or `[ACK]`, resend the same response (don't reprocess)
 
 Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
+
+---
+
+## Step 9: Disband Team (always runs, every exit path)
+
+**This step runs unconditionally** after Step 7 (Final Report) -- success path, partial-success path, global-timeout path, AND the deadlock escalation path. The user invoked the skill; the skill owns the team's lifecycle from `TeamCreate` (Step 4) to `TeamDelete` here.
+
+1. **Identify survivors:** any worker name still in `spawned_workers` after Steps 5d and 6e ran. Ideally this set is empty by the time you reach Step 9 -- workers should have been shut down individually at each completion. But ACK timeouts, work timeouts, deadlock escalations, and missed shutdown_response approvals can leave stragglers.
+
+2. **Send `shutdown_request` to every survivor** and collect responses:
+   ```python
+   for worker in survivors:
+       SendMessage(
+         to=worker,
+         message={"type": "shutdown_request", "reason": "team disbanding -- workflow complete"}
+       )
+   ```
+   Wait up to ~30s total for all `shutdown_response approve=true` messages. Their processes terminate on approve and they leave the team. Remove each confirmed shutdown from `spawned_workers`.
+
+3. **One retry pass** for any worker that didn't approve within the window: re-send `shutdown_request`. If a worker still doesn't shut down after the retry, log its name and proceed -- don't loop indefinitely.
+
+4. **Delete the team:**
+   ```python
+   TeamDelete(team_name=team_name)
+   ```
+   The team is gone. The user's team panel is clean.
+
+**Why `shutdown_request` and not `TaskStop` or "you're released":** plain-text "you are released" tells the worker conceptually that work is done, but does NOT terminate their process. `TaskStop` doesn't work on teammate agents either. Only `shutdown_request` -> `shutdown_response approve=true` actually terminates the process and removes it from the team panel.
 
 ---
 
@@ -377,11 +483,15 @@ Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 - Spawn per-story workers up to `max_parallel_workers`; never exceed the cap
 - Use the role name + story id for worker names (`TestCreator-STORY-3`); add `-cN` suffix on re-cycles to keep names unique
 - Tester workers always run **story-scoped** in this skill (`Test scope: story STORY-N`) so multiple Testers can run in parallel
-- After each worker completes, `TaskStop` it to free the slot
+- After each worker completes the handshake, send `SendMessage(to=worker, message={"type": "shutdown_request", ...})` to actually terminate it. A plain-text "you are released" message does NOT remove the worker from the team panel -- only `shutdown_request` -> `shutdown_response approve=true` does. `TaskStop` doesn't work either. Track every spawned worker in `spawned_workers` and remove on confirmed shutdown.
+- **Own the team lifecycle end-to-end** -- `TeamCreate` in Step 4, `shutdown_request` per worker on completion, `TeamDelete` in Step 9. Step 9 runs after every outcome (success / partial / timeout / deadlock). Never leave a team or its agents alive after the skill returns.
 - Track per-story cycle counts independently -- one stuck story doesn't drain the budget for others
 - Forward ProductOwner's questions / approval requests to the User -- never answer or approve on their behalf
 - Always invoke status flips through `_tools/update_story_status.py`; never edit story YAMLs directly
-- Trust the Tester's two-gate verdict for DONE -- it runs **Gate A** (per-story tests pass) AND **Gate B** (`verify_ac_map.py` passes for the AC implementation map sidecar the Developer wrote at `STORY-N.implementation.md`). Don't override either gate. When a story comes back to `IN_DEV` because Gate B failed, forward the verifier's JSON to the Developer in the next cycle's task message.
+- Trust the Tester's two-gate verdict for DONE -- it runs **Gate A** (per-story tests pass, including no build/compile/dex errors) AND **Gate B** (`verify_ac_map.py` passes for the AC implementation map sidecar the Developer wrote at `STORY-N.implementation.md`). Don't override either gate. When a story comes back to `IN_DEV` because Gate A or Gate B failed, forward the failure details to the Developer in the next cycle's task message.
+- Workers report ONE of three outcomes via the handshake's `[ACK]` payload: `DONE` (success), `IN_DEV` / back-to-previous (recoverable failure, next cycle handles it), or `BLOCKED` (unrecoverable -- requires user action). The handshake fires in ALL THREE cases. If a worker goes silent without a handshake, that's a bug -- escalate the worker via shutdown_request and mark its story BLOCKED with reason `silent_worker`.
+- **Dependency satisfaction is mechanical, not judged.** Always call `list_eligible.py --feature <feature_name>` at the top of every scan and trust its bucketing. A story's deps are satisfied **only** when every dep's `status == "DONE"`. `TESTING` doesn't count. `IN_DEV` doesn't count. Don't second-guess the script. The script returning STORY-2 in `blocked_on_deps` means STORY-2 cannot be spawned this scan, regardless of how close its deps look to being done.
+- Token recording is **automatic via discovery**: call `discover_and_record.py --feature <feature_name>` at exactly two trigger points -- once after PO approval (Step 5d), and once at the top of every scheduling scan (Step 6b). Don't try to record per-worker yourself; discovery walks the Claude Code transcripts directory and records anything missing. If discovery fails, log and continue -- never block the workflow on telemetry.
 
 **DON'T:**
 - Don't spawn an Orchestrator agent -- you ARE the orchestrator
@@ -399,4 +509,8 @@ Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 - `sage-config.SCHEMA.md` -- Config field reference (including `max_parallel_workers`, `global_timeout_seconds`)
 - `_tools/update_story_status.py` -- Atomic, locked story-status updater used by all workers
 - `_tools/verify_ac_map.py` -- Verifies a story's AC implementation map sidecar (Developer's mandatory artifact); Tester calls this as Gate B before flipping to DONE
+- `_tools/discover_and_record.py` -- **Token-tracking entry point for this skill.** Walks `~/.claude/projects/<slug>/<session>/subagents/`, finds every worker transcript, records any not yet in the JSON store. Idempotent. Call once after PO approval and once per scheduling scan -- it handles everything else.
+- `_tools/list_eligible.py` -- **Scheduling entry point for this skill.** Reads every story YAML, returns JSON with which stories are eligible for which role (TestCreator/Developer/Tester) and which are blocked on unmet deps. Call once at the top of every scheduling scan. Mechanical; treats `TESTING != DONE` correctly.
+- `_tools/extract_token_usage.py` -- Used internally by `record_worker_usage.py` to parse one transcript's usage. Don't call from this skill.
+- `_tools/record_worker_usage.py` -- Used internally by `discover_and_record.py` to record one worker. Also called directly from this skill in Step 7 to record the orchestrator's own main-session diff.
 - `examples/chatbot/.sage/` -- Reference per-agent instruction configs

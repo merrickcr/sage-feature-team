@@ -2,7 +2,7 @@
 
 **For complete details:** See ../HANDBOOK.md section "Progress File Updates"
 
-**Location:** `_output/FEATURE_[feature-name]_PROGRESS.md`
+**Location:** `_output/[feature-name]/progress.md`
 
 ---
 
@@ -18,7 +18,7 @@
 
 ### Phase 1: Specification
 [x] Specification created
-Spec file: `_output/FEATURE_SPEC_[feature-name].md`
+Spec file: `_output/[feature-name]/spec.md`
 Completed: [Date]
 
 ### Phase 2: Test Creation
