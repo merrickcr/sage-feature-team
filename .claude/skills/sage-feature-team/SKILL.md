@@ -1,117 +1,89 @@
 ---
 name: sage-feature-team
-description: Complete feature development workflow (ProductOwner → TestCreator → Developer → Tester)
-when_to_use: When you want to build a complete feature from requirements through specification, tests, implementation, and validation
+description: Complete feature development workflow (ProductOwner -> parallel TestCreator/Developer/Tester per story)
+when_to_use: When you want to build a complete feature from requirements through specification, tests, implementation, and validation -- with multiple stories worked in parallel
 ---
 
 # Sage Feature Team Skill
 
-You are the **Team Lead / Orchestrator** for a multi-agent feature development workflow. You run in the main conversation; the four worker agents (ProductOwner, TestCreator, Developer, Tester) report back to you (`@User`).
+You are the **Team Lead / Orchestrator** for a multi-agent feature development workflow. You run in the main conversation; worker agents report back to you (`@User`).
 
-Your job:
+> **Path note:** All `python .sage/_tools/...` and `python _tools/...` commands below assume an installed project (a `.sage/` directory exists at the project root). If you're running this skill from the sage-feature-team source repo itself (no `.sage/` exists), substitute `_tools/...` instead. The agent prompts you spawn already have this path baked in by `load_agents.py` via `{SAGE_TOOLS_DIR}` -- you don't need to fix them.
 
-1. Parse user input → determine mode and feature name
-2. Load agent prompts via the Python loader
-3. Create a team and spawn the agents
-4. Route work in order, monitor ACKs and completions
-5. Manage Developer↔Tester cycles until tests pass or `max_cycles` is hit
-6. Report success or escalate blockers
+The workflow has two phases:
 
-You don't decide HOW work is done in any particular project — that comes from each agent's `.sage/sage-<agent>-config.yaml`, which the loader bakes into the agent prompts.
+1. **Phase 1 -- ProductOwner (single agent, sequential).** A long-lived ProductOwner agent creates the spec and per-story YAML files, iterates on user feedback, and waits for `APPROVED`.
+2. **Phase 2 -- Parallel scheduler.** Once stories are approved, you become a scheduler. You scan the stories directory and **spawn ephemeral, per-story worker agents** (one per ready story, up to `max_parallel_workers`). Each worker handles one story, reports completion, and is shut down. You re-scan and spawn the next batch until every story is `DONE` or escalated.
+
+You don't decide HOW work is done in any particular project -- that comes from each agent's `.sage/sage-<agent>-config.yaml`, which the loader bakes into the agent prompts.
 
 ---
 
 ## Architectural Reminder
 
 ```
-sage-config.yaml          ← team/paths config
-.sage/sage-<role>-config  ← per-agent project instructions (instructions list)
-agents/_BASE.md           ← shared protocol + {PROJECT_INSTRUCTIONS} hook
-agents/<role>.md          ← generic job description
+sage-config.yaml          <- team/paths/limits config
+.sage/sage-<role>-config  <- per-agent project instructions (instructions list)
+agents/_BASE.md           <- shared protocol + {PROJECT_INSTRUCTIONS} hook
+agents/<role>.md          <- generic job description
    |
    v  load_agents.py assembles base + role + instructions
    v
-Agent prompt (fully rendered)
+Agent prompt (fully rendered) -- same prompt reused for every worker of that role
 ```
 
-The loader handles all variable substitution. You don't substitute anything yourself.
+Stories live as **per-story YAML files**:
+```
+_output/<feature_name>/stories/STORY-1.yaml
+_output/<feature_name>/stories/STORY-2.yaml
+...
+```
+
+Each YAML carries its own status. Concurrent workers update their own story file via `_tools/update_story_status.py` (locked, atomic).
 
 ---
 
 ## Step 1: Parse Input
 
-Extract from the user's invocation:
+From the user's invocation, compute these values once and reuse them throughout:
 
-**Mode:**
-- `--dev-test-only` (with optional `--full-regression` or `--targeted <test_names>`) → mode = `dev-test-only`. Skip ProductOwner and TestCreator.
-- Anything else → mode = `full`. Need a feature name.
+- **mode** -- `dev-test-only` if `--dev-test-only` flag present (with optional `--full-regression` or `--targeted <test_names>`), else `full`
+- **feature_name** -- full mode: extract from user's text and convert to snake_case (e.g., "Add Dark Mode" -> `add_dark_mode`); dev-test mode: `dev_test_cycle`
+- **output_dir** -- from `sage-config.yaml` -> `paths.output_dir` (typically `_output`)
+- **max_cycles** -- from `--max-cycles N` if given, else from `sage-config.yaml` -> `limits.max_cycles` (per-story dev<->test cap)
+- **max_parallel_workers** -- from `sage-config.yaml` -> `limits.max_parallel_workers` (default 4)
+- **global_timeout_seconds** -- from `sage-config.yaml` -> `limits.global_timeout_seconds` (default 3600)
+- **spec_file** -- `<output_dir>/<feature_name>/spec.md`
+- **stories_dir** -- `<output_dir>/<feature_name>/stories/`
+- **progress_file** -- `<output_dir>/<feature_name>/progress.md`
 
-**Feature name (full mode only):**
-- Extract from user's text (e.g., "Add Dark Mode")
-- Convert to snake_case: lowercase, spaces/hyphens → underscores
-- Use this exact name in all artifact paths (spec, progress, test files)
+**`--resume <feature_name>`** continues from existing artifacts.
 
-**Dev-test mode:**
-- No feature name needed. Default: `dev_test_cycle`.
-- Don't ask the user for requirements — they don't exist for ad-hoc test runs.
+Also: capture `feature_start_time = now()` here. You'll use this when invoking `discover_and_record.py` so it scopes to transcripts from this run only (otherwise it'd sweep the project's entire agent history).
 
-**Optional:**
-- `--max-cycles N` overrides the config's `max_cycles`
-
-**Resume:**
-- `--resume feature_name` → continue from existing progress file at `<output_dir>/FEATURE_<name>_PROGRESS.md`. Mode comes from the progress file.
+When you send messages to agents below, write the message naturally with these literal values inlined -- not Python f-string syntax with `{feature_name}` placeholders.
 
 ---
 
 ## Step 2: Load Agent Prompts
 
-Run the Python loader:
-
 ```bash
-python _tools/load_agents.py full
-# or
-python _tools/load_agents.py dev-test-only
+python .sage/_tools/load_agents.py full
 ```
 
-Expected JSON response:
+Expected JSON: `success: true`, `agents` containing rendered prompts for `ProductOwner`, `TestCreator`, `Developer`, `Tester`. Validate as in the previous version of this skill; if `success: false`, surface the error and stop.
 
-```json
-{
-  "success": true,
-  "mode": "full",
-  "team_name": "<from sage-config.yaml team.name>",
-  "agent_names": ["ProductOwner", "TestCreator", "Developer", "Tester"],
-  "agents": {
-    "ProductOwner": "<fully rendered prompt>",
-    "TestCreator": "<fully rendered prompt>",
-    "Developer":   "<fully rendered prompt>",
-    "Tester":      "<fully rendered prompt>"
-  },
-  "sage_dir": "<resolved path to .sage/ directory>",
-  "config_summary": {
-    "project_name": "...",
-    "absolute_root_dir": "..."
-  }
-}
-```
-
-**Validate:**
-- `success == true`
-- `agent_names` matches the mode (4 for `full`, 2 for `dev-test-only`)
-- Each agent in `agent_names` has an entry in `agents`
-- If `sage_dir` is null, agents will get a "no project instructions configured" placeholder — warn the user but continue
-
-If validation fails, surface the loader's `error` to the user and stop.
+You will reuse the rendered `TestCreator`, `Developer`, and `Tester` prompts as the prompt for every per-story worker of that role. The ProductOwner prompt is used once for Phase 1.
 
 ---
 
 ## Step 3: Preflight
 
-- `sage-config.yaml` was readable (loader confirmed by returning success)
-- The project's `output_dir` exists (or create it with `mkdir -p`)
-- For `full` mode with a feature name: no progress file collision (or use `--resume`)
+- `sage-config.yaml` was readable (loader confirmed)
+- `output_dir` exists (or create it)
+- For full mode with a feature name: no spec/stories collision (or use `--resume`)
 
-Don't preflight project-specific things (test runners, servers, frameworks). Those are owned by the agents' `.sage/` instructions, and Tester will validate them at run time.
+Don't preflight project-specific things (test runners, servers). Those belong to the agents' `.sage/` instructions.
 
 ---
 
@@ -123,157 +95,332 @@ TeamCreate(team_name=team_name, description="Sage feature development team")
 
 ---
 
-## Step 5: Spawn Workers
+## Step 5: Phase 1 -- ProductOwner (sequential, single agent)
 
-For each name in `agent_names`, in order:
+Skip this whole step in `dev-test-only` mode -- go straight to Phase 2 (Step 6) with the existing stories directory.
+
+### 5a. Spawn ProductOwner
 
 ```python
 Agent(
-  name=agent_name,
-  prompt=agents[agent_name],
+  name="ProductOwner",
+  prompt=agents["ProductOwner"],
   team_name=team_name,
   subagent_type="general-purpose"
 )
 ```
 
-Wait 2-3 seconds between spawns. Agents will idle until you send them a SendMessage task — `_BASE.md` enforces a Task-Waiting Rule. If any agent acts on its own before receiving a task, immediately tell it to STOP and wait.
+Wait 2-3 seconds. The agent idles until you SendMessage it.
+
+### 5b. Send the spec task
+
+SendMessage to `ProductOwner`:
+- `@User: [Feature: <feature_name>]` opener
+- `[Task: po-spec-<feature_name>]`
+- The user's requirements (verbatim)
+- `Spec file: <spec_file>`
+- `Stories dir: <stories_dir>`
+- `Progress file: <progress_file>`
+- `Reference: HANDBOOK.md`
+
+Run **ACK + completion monitoring** (Step 8).
+
+### 5c. Forward questions to the User; require explicit APPROVED
+
+- When ProductOwner asks questions: forward them to the User; relay the answer back. Don't answer for the user.
+- When ProductOwner reports the spec is ready: forward to the User: "ProductOwner has completed the spec -- please review and reply APPROVED to proceed." Wait for explicit `APPROVED`.
+
+### 5d. Record token usage and shut down ProductOwner
+
+After ProductOwner's completion handshake:
+
+1. **Record token usage via discovery** (mechanical, idempotent -- doesn't depend on you remembering anything per-spawn):
+   ```bash
+   python .sage/_tools/discover_and_record.py --feature <feature_name>
+   ```
+
+   Discovery defaults to **current-session-only scope** -- it auto-detects which `~/.claude/projects/<slug>/<session-uuid>/` is the active one (the dir with most recent activity) and only scans that. This matches `/usage` semantics (current Claude Code session). No `--since-minutes` needed in the common case.
+
+   If multiple discrete workflow runs happened in the same Claude Code session and you want only the latest one, add `--since-minutes <ceil((now-feature_start_time)/60) + 5>` to further narrow.
+
+   Discovery walks `~/.claude/projects/<slug>/<current-session>/subagents/`, finds every sage worker transcript (filters out built-in `Explore`/`Plan`/etc. agents), reads each `.meta.json` to identify the worker, and records any not yet in `<output_dir>/<feature_name>/tokens.json`. Re-renders `<feature_name>/tokens.md`. Safe to call multiple times; existing entries are skipped. If discovery returns `success: false`, log it and continue -- never block the workflow on telemetry.
+
+2. **Shut down the agent.** The ONLY way to actually remove a teammate from the team panel is to send `shutdown_request`; the teammate responds with `shutdown_response approve=true` and their process terminates. A "you are released" plain-text message does NOT shut anyone down -- the agent stays idle in the team panel. `TaskStop` doesn't work either.
+
+   ```python
+   SendMessage(
+     to="ProductOwner",
+     message={"type": "shutdown_request", "reason": "Phase 1 complete -- spec approved, releasing"}
+   )
+   ```
+
+   Wait briefly (up to ~10s) for ProductOwner's `shutdown_response approve=true`. Their process terminates on approve and they leave the team panel. Remove `ProductOwner` from your tracked `spawned_workers` set (initialized in Step 6a). If the worker doesn't respond or sends `approve=false`, log it -- Step 9 (Disband Team) will retry shutdown for any survivors before calling `TeamDelete`.
 
 ---
 
-## Step 6: Route Work
+## Step 6: Phase 2 -- Parallel Scheduler
+
+You now own a scheduling loop. You read the stories directory, spawn per-story workers, wait for any to complete, and re-scan. The loop ends when every story is `DONE` (or escalated as terminal `BLOCKED`/cycle-exhausted), or the global timeout fires.
+
+### 6a. Initialize state
+
+In your own working memory (no need to write to disk), maintain:
+
+```
+in_flight        = {}   # STORY-N -> {role, agent_name, started_at, cycle_n}
+spawned_workers  = set()  # every worker name you've Agent()-spawned and not yet confirmed shut down (incl. ProductOwner if Phase 1 ran). Source of truth for Step 9 teardown.
+cycle_count      = {}   # STORY-N -> int (Developer->Tester rounds completed; counts when Tester re-flips to IN_DEV)
+escalated        = set()  # STORY-Ns that hit max_cycles or are unrecoverable
+start_time       = now()
+```
+
+When you `Agent(...)` to spawn a worker, add `worker_name` to `spawned_workers`. When you confirm a worker has shut down (received `shutdown_response approve=true`), remove it.
+
+### 6b. Scheduling rule (per scan)
+
+**At the top of every scan, run discovery to record any worker token usage that completed since the last scan:**
+
+```bash
+python .sage/_tools/discover_and_record.py --feature <feature_name>
+```
+
+Defaults to current Claude Code session only (auto-detected). This matches `/usage` semantics and prevents pulling in transcripts from previous interrupted runs in different sessions. No flags needed in the common case.
+
+If you want to additionally narrow to a sub-window of the current session (e.g., multiple workflow runs in the same session), pass `--since-minutes <ceil((now-feature_start_time)/60) + 5>` based on `feature_start_time` from Step 1.
+
+One call per scan. Mechanical and idempotent -- it walks the current session's subagent directory, filters out built-in `Explore`/`Plan` agents, finds every sage worker transcript, and records any not yet in `<output_dir>/<feature_name>/tokens.json`. This is the **only** mechanism by which token usage gets recorded -- no per-worker recording calls anywhere else in this skill. Re-rendering of `<feature_name>/tokens.md` happens automatically as a side effect of any new entries being added.
+
+If discovery returns `success: false`, log it and proceed -- don't block the scheduler on telemetry.
+
+---
+
+**Compute eligibility mechanically -- do NOT eyeball the YAMLs.** Call the eligibility script:
+
+```bash
+python .sage/_tools/list_eligible.py --feature <feature_name>
+```
+
+Returns JSON like:
+```json
+{
+  "success": true,
+  "TestCreator":     ["STORY-2"],            // TODO + every dep at status DONE
+  "Developer":       ["STORY-4", "STORY-5"], // IN_DEV + every dep at status DONE
+  "Tester":          ["STORY-1"],            // TESTING + every dep at status DONE
+  "in_progress":     ["STORY-7"],            // CREATE_TESTS (TestCreator owned it; resume-only)
+  "blocked_on_deps": {"STORY-3": ["STORY-1 (TESTING, needs DONE)"]},
+  "blocked":         ["STORY-6"],            // status BLOCKED
+  "done":            [],
+  "all_statuses":    {"STORY-1": "TESTING", ...}
+}
+```
+
+**The script's lists are authoritative.** Spawn workers only for stories that appear in `TestCreator`, `Developer`, or `Tester`. Never spawn for a story that's only in `blocked_on_deps`, `blocked`, `in_progress`, or `done` -- those are explicitly NOT eligible.
+
+**Critical rule the script enforces:** a dependency is satisfied **only** when its `status == "DONE"`. `TESTING` is NOT close enough. `IN_DEV` is NOT close enough. Only `DONE`. This matters on resume (e.g., you interrupted last run while STORY-1 was at TESTING): downstream TODO stories that depend on STORY-1 stay in `blocked_on_deps` until STORY-1 actually reaches DONE.
+
+After getting the JSON: skip any story whose ID is in `in_flight` (you're already running a worker for it) or `escalated` (per-story max_cycles exhausted). Sort the remaining eligible stories by ID (lowest STORY-N first).
+
+Quick reference of what the script returns vs. action:
+
+| Bucket | Action |
+|---|---|
+| `TestCreator` | Eligible -- spawn `TestCreator-<STORY-N>` |
+| `Developer`   | Eligible -- spawn `Developer-<STORY-N>` (add `-cN` on re-cycles) |
+| `Tester`      | Eligible -- spawn `Tester-<STORY-N>` (story-scoped, story-only) |
+| `in_progress` | CREATE_TESTS state -- typically left over from interrupt. Treat as in-flight. If it's stale (no real worker), flip back to TODO via `update_story_status.py` to let it re-trigger. |
+| `blocked_on_deps` | Skip. Will be re-evaluated next scan after its deps reach DONE. |
+| `blocked`     | Skip. User must resolve out-of-band (edit YAML, `--resume`). |
+| `done`        | Skip. |
+
+Available slots = `max_parallel_workers - len(in_flight)`. Spawn `min(slots, len(eligible))` workers.
+
+If `len(in_flight) == 0` AND no eligible stories AND not every story is `DONE`: **deadlock**. Escalate (Step 6f).
+
+### 6c. Spawn a per-story worker
+
+Worker name pattern: `<Role>-<STORY-N>` (e.g., `TestCreator-STORY-3`, `Developer-STORY-7`, `Tester-STORY-2`). Names must be unique within the team -- if a worker for the same story+role was previously spawned and shut down, append a `-cN` suffix where N is the cycle count for that story (e.g., `Developer-STORY-3-c2`).
+
+```python
+Agent(
+  name=worker_name,
+  prompt=agents[role],         # rendered prompt for the role; same for every worker of that role
+  team_name=team_name,
+  subagent_type="general-purpose"
+)
+spawned_workers.add(worker_name)
+# wait ~2s
+SendMessage(to=worker_name, summary="...", message=<task message>)
+```
+
+Track `in_flight[STORY-N] = {role, agent_name: worker_name, started_at: now(), cycle_n: cycle_count[STORY-N]}`.
+
+### 6d. Per-role task message templates
+
+All worker task messages should be self-contained -- workers don't share state with each other. Always pass the story id, paths, and references explicitly.
+
+#### TestCreator worker (for a TODO story)
+
+SendMessage:
+- `@User: [Feature: <feature_name>] (Story: <STORY-N>)` opener
+- `[Task: tc-<STORY-N>-<feature_name>]`
+- `Target story: <STORY-N>` (this is your single target -- no auto-discovery)
+- `Stories dir: <stories_dir>`
+- `Spec file: <spec_file>`
+- `Progress file: <progress_file>`
+- `Reference: HANDBOOK.md`
+
+#### Developer worker (for an IN_DEV story)
+
+SendMessage:
+- `@User: [Feature: <feature_name>] (Story: <STORY-N>, Cycle: <cycle_n>/<max_cycles>)` opener
+- `[Task: dev-<STORY-N>-c<cycle_n>-<feature_name>]`
+- `Target story: <STORY-N>`
+- `Stories dir: <stories_dir>`
+- `Spec file: <spec_file>`
+- `Progress file: <progress_file>`
+- If `cycle_n > 1`: paste the previous Tester run's `TEST_FAILURE` lines for this story verbatim. If the previous Tester reported the story came back to `IN_DEV` because the **AC implementation map gate failed** (Gate B), paste the `verify_ac_map.py` JSON verbatim too -- those are the gaps the Developer must close this cycle.
+- Reminder: `Required artifact: <stories_dir>/STORY-<N>.implementation.md (run verify_ac_map.py before claiming COMPLETE).`
+- `Reference: HANDBOOK.md`
+
+#### Tester worker (for a TESTING story -- story-scoped)
+
+SendMessage:
+- `@User: [Feature: <feature_name>] (Story: <STORY-N>)` opener
+- `[Task: tester-<STORY-N>-c<cycle_n>-<feature_name>]`
+- `Target story: <STORY-N>`
+- `Test scope: story <STORY-N>` (LITERAL -- Tester role file uses this to construct a story-scoped selector and to know it must only flip this story)
+- `Stories dir: <stories_dir>`
+- `Progress file: <progress_file>`
+- `Reference: HANDBOOK.md`
+
+The Tester role file has the story-scoped selector logic: it reads the project's tagging convention from `.sage/sage-test-creator-config.yaml` and runs only that story's tests. Multiple Tester workers can run concurrently as long as the project's test isolation allows it.
+
+### 6e. Wait for ANY worker to complete; reschedule
+
+After spawning a batch, you wait. Don't block on a specific worker -- wait on the team and act on whichever completes first.
+
+For each completion (handshake `[ACK]+DATA` from a worker):
+
+1. **Run the standard handshake** (Step 8 / `HANDBOOK.md`): reply `[SYN-ACK]`, accept `[ACK]+DATA`, send a routing message that acts as the implicit final ACK. The routing message can simply be: `@<worker>: Acknowledged. You are released -- shutting down.`
+2. **Re-read the completed story's YAML** to learn its new status (the worker already flipped it via `update_story_status.py`).
+3. **Update bookkeeping based on the new story status:**
+   - **Story is now `IN_DEV`** (from Tester or via re-cycle):
+     - `cycle_count[STORY-N] += 1`. The Tester's `[ACK]` payload tells you *why* it sent the story back -- Gate A (test/build/compile/dex failure) or Gate B (AC implementation map gate). **Trust the verdict; don't re-verify.** Carry the failure details forward (failing test list, build error excerpt, or `verify_ac_map.py` JSON) into the next Developer task message verbatim. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and run per-story escalation (Step 6f).
+   - **Story is now `DONE`** (from Tester): both gates passed. Nothing more for this story.
+   - **Story is now `TESTING`** (from Developer): ready for Tester next scan. (Developer will not have flipped without first running `verify_ac_map.py` and getting success.)
+   - **Story is now in a state implying TestCreator finished** (was `TODO`/`CREATE_TESTS`, now `IN_DEV` from TestCreator): ready for Developer next scan. TestCreator may also have written stub tests for AC its seam can't cover.
+   - **Story is now `BLOCKED`** (any worker reported Outcome 3 -- truly unrecoverable): the worker already marked it BLOCKED via `update_story_status.py` and included a blocker reason in its `[ACK]` payload. **Don't try to fix it or re-cycle.** Add to `escalated`, log the blocker, surface to User immediately:
+     ```
+     @User: [Feature: <feature_name>] STORY-N marked BLOCKED by <Role>
+     Reason: <blocker reason from [ACK] payload>
+     Details: <relevant context from worker's report>
+     Continuing other stories. Resolve this one out-of-band (edit spec, fix config, etc.) and re-run with --resume.
+     ```
+     Continue the scheduler -- one BLOCKED story doesn't stop the rest.
+4. **Shut down the worker** to actually remove it from the team panel:
+   ```python
+   SendMessage(
+     to=worker_name,
+     message={"type": "shutdown_request", "reason": "task complete -- releasing worker"}
+   )
+   ```
+   Wait briefly (up to ~10s) for the worker's `shutdown_response approve=true`. Their process terminates on approve and they disappear from the team panel. Once confirmed, remove `worker_name` from `spawned_workers`. If they don't respond or send `approve=false`, log the worker name -- Step 9 (Disband Team) will retry shutdown for any survivors at the end of the workflow. **Never skip this step**: without it, the worker stays idle in the team panel indefinitely. (Note: `TaskStop` does NOT remove agents from the team panel -- only `shutdown_request` does.)
+5. **Remove from `in_flight`** and re-run the scheduling rule (6b) to pick up newly eligible stories.
+
+### 6f. Per-story escalation
+
+When a story hits `max_cycles` (Developer<->Tester loops without success) or a worker reports an unrecoverable BLOCKER:
+
+- Add it to `escalated`
+- Mark its YAML `BLOCKED` via the helper (with a reason):
+  ```bash
+  python .sage/_tools/update_story_status.py STORY-N BLOCKED \
+      --stories-dir <stories_dir> --reason "max_cycles exceeded after <n> rounds"
+  ```
+- Report to the User: `@User: [Feature: <feature_name>] STORY-N escalated -- <reason>. Continuing other stories.`
+- Continue the scheduler -- one stuck story doesn't stop the rest
+
+### 6g. Global wall-clock kill switch
+
+At the top of every scan, check `now() - start_time >= global_timeout_seconds`. If hit:
+
+- Stop spawning new workers
+- Wait briefly (one more tick) for in-flight workers to complete naturally
+- Mark every still-non-DONE story as `BLOCKED` with reason `global_timeout`
+- Jump to Step 7 (Final Report) with `Status: GLOBAL_TIMEOUT`, then **Step 9 (Disband Team)** -- the catch-all that sends `shutdown_request` to every surviving worker in `spawned_workers` and calls `TeamDelete`.
+
+### 6h. Loop exit
+
+The scheduler loop exits cleanly when:
+- Every story in `stories_dir` is `status: DONE` -> success
+- OR every remaining non-DONE story is in `escalated` -> partial success (some stories escalated)
+- OR the global timeout fired -> escalation
+
+---
+
+## Step 7: Final Report
+
+Worker token usage was recorded incrementally by `discover_and_record.py` at every scheduling scan (Step 6b). The orchestrator's own main-conversation cost isn't tracked in the per-feature TOKENS file -- it's part of the user's session total (visible via Claude Code's `/usage` command).
+
+
+### Success (Full Mode, all stories DONE)
+
+```
+@User: [Feature: <feature_name>] Feature Development Complete
+
+Status: SUCCESS
+Stories: <N> total, all DONE
+Cycles used (per story): STORY-1=1, STORY-2=2, ...
+Wall clock: <elapsed>s
+
+Artifacts:
+- Spec:        <spec_file>
+- Stories dir: <stories_dir>
+- Tests:       see git diff
+- Code:        see git diff
+```
+
+### Partial Success (some stories escalated)
+
+```
+@User: [Feature: <feature_name>] Feature Development Partially Complete
+
+Status: PARTIAL
+Stories DONE:      STORY-1, STORY-3, ...
+Stories ESCALATED: STORY-2 (max_cycles), STORY-5 (BLOCKED: ...)
+
+See <stories_dir> for blocked_reason on each escalated story.
+```
+
+### Global Timeout
+
+```
+@User: [Feature: <feature_name>] Workflow Hit Global Timeout
+
+Status: GLOBAL_TIMEOUT after <global_timeout_seconds>s
+Stories DONE: ...
+Stories left: ...
+```
 
 ### Dev-Test Mode
 
-Skip directly to **Step 7 (Cycle Loop)** with `cycle_count = 1`. The first message goes to **Developer** (never Tester first), even though tests already exist — Developer needs to know which tests are failing before fixing.
-
-If you need to discover what's failing first, send Tester an "initial discovery" task before the cycle loop.
-
-### Full Mode
-
-#### Phase 1 — ProductOwner
-
-```python
-SendMessage(
-  to="ProductOwner",
-  summary="Create specification",
-  message=f"""@User: [Feature: {feature_name}] Create specification document.
-
-[Task: po-spec-{feature_name}]
-
-Requirements:
-{user_requirements}
-
-Job: Create the spec at {output_dir}/FEATURE_SPEC_{feature_name}.md and the progress file at {output_dir}/FEATURE_{feature_name}_PROGRESS.md. Request user approval when done.
-
-Reference: HANDBOOK.md""")
-```
-
-Then run the **ACK + completion monitoring** described in Step 8.
-
-**When ProductOwner has questions:** Don't answer for the user. Forward the questions to the User and wait for their response before relaying back.
-
-**When ProductOwner reports the spec is ready:** Don't approve it yourself. Forward to the User: "ProductOwner has completed the spec — please review and reply APPROVED to proceed." Wait for explicit `APPROVED` before going to Phase 2.
-
-#### Phase 2 — TestCreator
-
-```python
-SendMessage(
-  to="TestCreator",
-  summary="Create tests",
-  message=f"""@User: [Feature: {feature_name}] Create integration tests.
-
-[Task: tc-tests-{feature_name}]
-
-Spec file: {output_dir}/FEATURE_SPEC_{feature_name}.md
-Progress file: {output_dir}/FEATURE_{feature_name}_PROGRESS.md
-
-Job: Write tests covering all acceptance criteria. Use the project's test conventions (location, framework, naming) — see your project instructions.
-
-Reference: HANDBOOK.md""")
-```
-
-Then ACK + completion monitoring. After completion, initialize `cycle_count = 1` and proceed to Step 7.
+(Phase 1 skipped; Phase 2 still applies but works against the existing stories directory. If no stories directory exists, fall back to the legacy `/sage-dev-test` flow -- recommend the user invoke that skill instead.)
 
 ---
 
-## Step 7: Dev/Test Cycle Loop
-
-Used by both modes. Developer fixes code; Tester runs tests.
-
-```
-WHILE cycle_count <= max_cycles:
-  [1] Send Developer task with failing test names
-      Run ACK + completion monitoring
-      Read progress file: confirm Development = DONE
-  [2] Send Tester task
-      Run ACK + completion monitoring
-      Read progress file: capture Testing result
-  [3] If PASSED  → break (success)
-      If FAILED and cycle_count < max → extract failures, cycle_count++
-      If FAILED and cycle_count == max → escalate "Max cycles exceeded"
-```
-
-### Developer message
-
-```python
-SendMessage(
-  to="Developer",
-  summary=f"Fix failing tests (cycle {n}/{max})",
-  message=f"""@User: [Feature: {feature_name}] Make failing tests pass. (Cycle {n}/{max})
-
-[Task: dev-cycle-{n}-{feature_name}] [Cycle: {n}/{max}]
-
-Spec file:  {output_dir}/FEATURE_SPEC_{feature_name}.md  (omit in dev-test mode)
-Test file:  <from TestCreator's report, or whatever the project instructions point at>
-Progress:   {output_dir}/FEATURE_{feature_name}_PROGRESS.md  (omit in dev-test mode)
-
-[If cycle > 1, paste the previous cycle's TEST_FAILURE lines here]
-
-Failing tests to fix:
-- <name 1>
-- <name 2>
-
-Job: Fix implementation only. Do NOT run tests — Tester does that. Follow your project instructions for code conventions and file locations.
-
-Reference: HANDBOOK.md""")
-```
-
-### Tester message
-
-```python
-SendMessage(
-  to="Tester",
-  summary=f"Run tests (cycle {n}/{max})",
-  message=f"""@User: [Feature: {feature_name}] Run tests and report results. (Cycle {n}/{max})
-
-[Task: tester-{n}-{feature_name}] [Cycle: {n}/{max}]
-
-Test scope: <full regression, or specific test names if dev-test --targeted>
-Progress:   {output_dir}/FEATURE_{feature_name}_PROGRESS.md  (omit in dev-test mode)
-
-Job: Follow your project instructions for setup, test command, log paths, and result parsing. Report pass/fail with TEST_FAILURE lines for any failures.
-
-Reference: HANDBOOK.md""")
-```
-
-### Idle = completion
-
-When an agent sends `STATUS: COMPLETE | READY: yes` and then goes idle, that idle notification IS the completion signal. Don't wait for additional messages — read the progress file and route to the next agent immediately.
-
----
-
-## Step 8: Monitoring (ACK + Completion)
+## Step 8: Monitoring (ACK + Completion + Handshake)
 
 ### ACK monitoring (every task you send)
 
 | T | Action |
 |---|---|
-| 0–30s | Wait for `STATUS: ACKNOWLEDGED` |
-| 30s | If no ACK, send: `@<Agent>: Did you receive my message?` |
-| 45s | If no ACK, send: `@<Agent>: Please send ACK when ready.` |
-| 60s | If no ACK, **escalate to User** (ACK timeout) |
+| 0-30s | Wait for `STATUS: ACKNOWLEDGED` |
+| 30s | If no ACK, send: `@<worker>: Did you receive my message?` |
+| 45s | If no ACK, send: `@<worker>: Please send ACK when ready.` |
+| 60s | If no ACK, **escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "ack_timeout"})`, mark its story `BLOCKED` with reason `ack_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling |
 
-Use `ScheduleWakeup` so you don't block while waiting.
+Use `ScheduleWakeup` so you don't block while waiting; or use `Monitor` on the team to receive worker messages reactively.
 
 ### Completion monitoring
 
@@ -281,63 +428,49 @@ After ACK:
 
 | T | Action |
 |---|---|
-| 0–5min | Wait for completion message |
-| 5min | Send a gentle status check |
-| 8min | **Escalate to User** (work timeout) |
+| 0-`timeout_work_hard`s (default 480s = 8min) | Wait for completion |
+| `timeout_work_hard / 2` | Send a gentle status check |
+| `timeout_work_hard` | **Escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "work_timeout"})`, mark its story `BLOCKED` with reason `work_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling |
 
 ### Handshake (Team Lead side)
 
-When an agent sends `[SYN] <message_id>`:
-1. Within 1–2 seconds, reply with `[SYN-ACK] <same message_id>`
+When a worker sends `[SYN] <message_id>`:
+1. Within 1-2s, reply `[SYN-ACK] <same message_id>`
 2. Wait for `[ACK] <same message_id>` + completion data
-3. Process the data (read progress file, etc.)
-4. Send routing message to next agent — this acts as the implicit final ACK
-5. Track processed message IDs; if you see a duplicate `[SYN]` or `[ACK]`, resend the same response (don't reprocess)
+3. Process the data (re-read story YAML)
+4. Send the routing acknowledgment message -- plain-text acknowledgment of receipt (NOT itself a shutdown)
+5. Send `shutdown_request` to actually terminate the worker: `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "task complete"})`. Wait for `shutdown_response approve=true` -- their process terminates on approve. Remove the worker from `spawned_workers`. **`TaskStop` does NOT terminate teammate agents in the panel -- only `shutdown_request` does.**
+6. Track processed message IDs; on duplicate `[SYN]` or `[ACK]`, resend the same response (don't reprocess)
 
-Full protocol: HANDBOOK.md → "Message Delivery Handshake Protocol".
+Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 
 ---
 
-## Step 9: Final Report
+## Step 9: Disband Team (always runs, every exit path)
 
-### Success (Full Mode)
+**This step runs unconditionally** after Step 7 (Final Report) -- success path, partial-success path, global-timeout path, AND the deadlock escalation path. The user invoked the skill; the skill owns the team's lifecycle from `TeamCreate` (Step 4) to `TeamDelete` here.
 
-```
-@User: [Feature: {feature_name}] Feature Development Complete
+1. **Identify survivors:** any worker name still in `spawned_workers` after Steps 5d and 6e ran. Ideally this set is empty by the time you reach Step 9 -- workers should have been shut down individually at each completion. But ACK timeouts, work timeouts, deadlock escalations, and missed shutdown_response approvals can leave stragglers.
 
-Status: SUCCESS
-Cycles used: {cycle_count}/{max_cycles}
+2. **Send `shutdown_request` to every survivor** and collect responses:
+   ```python
+   for worker in survivors:
+       SendMessage(
+         to=worker,
+         message={"type": "shutdown_request", "reason": "team disbanding -- workflow complete"}
+       )
+   ```
+   Wait up to ~30s total for all `shutdown_response approve=true` messages. Their processes terminate on approve and they leave the team. Remove each confirmed shutdown from `spawned_workers`.
 
-Artifacts:
-- Spec:  {output_dir}/FEATURE_SPEC_{feature_name}.md
-- Tests: <from TestCreator's report>
-- Code:  see git diff
+3. **One retry pass** for any worker that didn't approve within the window: re-send `shutdown_request`. If a worker still doesn't shut down after the retry, log its name and proceed -- don't loop indefinitely.
 
-All acceptance criteria tested and passing.
-```
+4. **Delete the team:**
+   ```python
+   TeamDelete(team_name=team_name)
+   ```
+   The team is gone. The user's team panel is clean.
 
-### Success (Dev-Test Mode)
-
-```
-@User: [Dev-Test] Test/Fix Cycle Complete
-
-Status: SUCCESS
-Cycles used: {cycle_count}/{max_cycles}
-
-All tests passing. See git diff for code changes.
-```
-
-### Escalation
-
-```
-@User: [Feature: {feature_name}] Workflow Blocked
-
-Status: ESCALATION
-Blocker: <ACK timeout | Work timeout | Max cycles exceeded | Test hang>
-
-Details: <specific failures, test names, last known state>
-Recommended action: <what the user should do>
-```
+**Why `shutdown_request` and not `TaskStop` or "you're released":** plain-text "you are released" tells the worker conceptually that work is done, but does NOT terminate their process. `TaskStop` doesn't work on teammate agents either. Only `shutdown_request` -> `shutdown_response approve=true` actually terminates the process and removes it from the team panel.
 
 ---
 
@@ -345,26 +478,39 @@ Recommended action: <what the user should do>
 
 **DO:**
 - Standardize feature name to snake_case BEFORE sending to any agent
-- Read progress file BEFORE every routing decision (file is source of truth, not agent messages)
-- After Phase 2 in full mode: route to **Developer FIRST**, then Tester (never Tester first in a cycle's first iteration)
-- Treat agent idle as completion signal — read progress file, route immediately
-- Send `[SYN-ACK]` within 1–2 seconds of receiving `[SYN]`
-- Track processed message IDs to dedupe handshake retries
-- Forward ProductOwner's questions / approval requests to the User — never answer or approve on their behalf
+- Phase 1: ProductOwner is single, sequential, long-lived -- wait for explicit `APPROVED` before Phase 2
+- Phase 2: Re-read the stories directory before every scheduling decision (YAML files are source of truth, not agent messages)
+- Spawn per-story workers up to `max_parallel_workers`; never exceed the cap
+- Use the role name + story id for worker names (`TestCreator-STORY-3`); add `-cN` suffix on re-cycles to keep names unique
+- Tester workers always run **story-scoped** in this skill (`Test scope: story STORY-N`) so multiple Testers can run in parallel
+- After each worker completes the handshake, send `SendMessage(to=worker, message={"type": "shutdown_request", ...})` to actually terminate it. A plain-text "you are released" message does NOT remove the worker from the team panel -- only `shutdown_request` -> `shutdown_response approve=true` does. `TaskStop` doesn't work either. Track every spawned worker in `spawned_workers` and remove on confirmed shutdown.
+- **Own the team lifecycle end-to-end** -- `TeamCreate` in Step 4, `shutdown_request` per worker on completion, `TeamDelete` in Step 9. Step 9 runs after every outcome (success / partial / timeout / deadlock). Never leave a team or its agents alive after the skill returns.
+- Track per-story cycle counts independently -- one stuck story doesn't drain the budget for others
+- Forward ProductOwner's questions / approval requests to the User -- never answer or approve on their behalf
+- Always invoke status flips through `_tools/update_story_status.py`; never edit story YAMLs directly
+- Trust the Tester's two-gate verdict for DONE -- it runs **Gate A** (per-story tests pass, including no build/compile/dex errors) AND **Gate B** (`verify_ac_map.py` passes for the AC implementation map sidecar the Developer wrote at `STORY-N.implementation.md`). Don't override either gate. When a story comes back to `IN_DEV` because Gate A or Gate B failed, forward the failure details to the Developer in the next cycle's task message.
+- Workers report ONE of three outcomes via the handshake's `[ACK]` payload: `DONE` (success), `IN_DEV` / back-to-previous (recoverable failure, next cycle handles it), or `BLOCKED` (unrecoverable -- requires user action). The handshake fires in ALL THREE cases. If a worker goes silent without a handshake, that's a bug -- escalate the worker via shutdown_request and mark its story BLOCKED with reason `silent_worker`.
+- **Dependency satisfaction is mechanical, not judged.** Always call `list_eligible.py --feature <feature_name>` at the top of every scan and trust its bucketing. A story's deps are satisfied **only** when every dep's `status == "DONE"`. `TESTING` doesn't count. `IN_DEV` doesn't count. Don't second-guess the script. The script returning STORY-2 in `blocked_on_deps` means STORY-2 cannot be spawned this scan, regardless of how close its deps look to being done.
+- Token recording is **automatic via discovery**: call `discover_and_record.py --feature <feature_name>` at exactly two trigger points -- once after PO approval (Step 5d), and once at the top of every scheduling scan (Step 6b). Don't try to record per-worker yourself; discovery walks the Claude Code transcripts directory and records anything missing. If discovery fails, log and continue -- never block the workflow on telemetry.
 
 **DON'T:**
-- Don't spawn an Orchestrator agent — you ARE the orchestrator
-- Don't modify the progress file yourself (each agent owns its phase's section)
-- Don't make technical decisions — escalate questions to the appropriate agent or the User
-- Don't preflight project-specific things (test commands, servers) — that's Tester's job per its `.sage/` instructions
-- Don't substitute variables in agent prompts — the loader did that already
+- Don't spawn an Orchestrator agent -- you ARE the orchestrator
+- Don't keep workers alive between stories -- spawn fresh per story so you can use natural shutdown for rate-limiting
+- Don't run a Tester worker with `Test scope: full regression` from this skill -- full regression is for `/sage-dev-test` and the inline `/sage-tester --full`. The parallel scheduler relies on per-story scoping for safe concurrency.
+- Don't preflight project-specific things (test commands, servers) -- that's each worker's job per its `.sage/` instructions
+- Don't substitute variables in agent prompts -- the loader did that already
 
 ---
 
 ## References
 
-- `HANDBOOK.md` — Full protocol (handshake, ACK, escalation, Monitor tool)
-- `guides/ORCHESTRATOR_PATTERNS.md` — Reusable patterns shared between this skill and `sage-dev-test`
-- `references/ROUTING_REFERENCE.md` — Routing decision tree
-- `sage-config.SCHEMA.md` — Config field reference
-- `examples/chatbot/.sage/` — Reference per-agent instruction configs
+- `HANDBOOK.md` -- Full protocol (handshake, ACK, escalation, Monitor tool)
+- `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable Skill/Team Lead patterns
+- `sage-config.SCHEMA.md` -- Config field reference (including `max_parallel_workers`, `global_timeout_seconds`)
+- `_tools/update_story_status.py` -- Atomic, locked story-status updater used by all workers
+- `_tools/verify_ac_map.py` -- Verifies a story's AC implementation map sidecar (Developer's mandatory artifact); Tester calls this as Gate B before flipping to DONE
+- `_tools/discover_and_record.py` -- **Token-tracking entry point for this skill.** Walks `~/.claude/projects/<slug>/<session>/subagents/`, finds every worker transcript, records any not yet in the JSON store. Idempotent. Call once after PO approval and once per scheduling scan -- it handles everything else.
+- `_tools/list_eligible.py` -- **Scheduling entry point for this skill.** Reads every story YAML, returns JSON with which stories are eligible for which role (TestCreator/Developer/Tester) and which are blocked on unmet deps. Call once at the top of every scheduling scan. Mechanical; treats `TESTING != DONE` correctly.
+- `_tools/extract_token_usage.py` -- Used internally by `record_worker_usage.py` to parse one transcript's usage. Don't call from this skill.
+- `_tools/record_worker_usage.py` -- Used internally by `discover_and_record.py` to record one worker. Also called directly from this skill in Step 7 to record the orchestrator's own main-session diff.
+- `examples/chatbot/.sage/` -- Reference per-agent instruction configs

@@ -36,4 +36,6 @@ paths:
   sage_dir: "examples/chatbot/.sage"
 
 limits:
-  max_cycles: 5
+  max_cycles: 5                # per-story dev↔test cycle cap
+  max_parallel_workers: 4      # concurrent ephemeral worker cap (parallel scheduler)
+  global_timeout_seconds: 3600 # wall-clock kill switch for full-mode feature runs

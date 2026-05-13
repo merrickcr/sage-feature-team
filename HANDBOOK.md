@@ -26,21 +26,21 @@ This document is referenced by all 4 agents (ProductOwner, TestCreator, Develope
 
 ---
 
-## Message Delivery Handshake Protocol (True 3-Way: SYN → SYN-ACK → ACK)
+## Message Delivery Handshake Protocol (True 3-Way: SYN -> SYN-ACK -> ACK)
 
 **Purpose:** Guarantee communication between agents and Team Lead using a true TCP-style 3-way handshake.
 
-**⚠️ Detailed Implementation:** See [_BASE.md](_BASE.md#message-id-generation--handshake-retry-logic) for complete pseudocode, retry logic, and message ID generation.
+**[!] Detailed Implementation:** See [_BASE.md](_BASE.md#message-id-generation--handshake-retry-logic) for complete pseudocode, retry logic, and message ID generation.
 
 ### Quick Summary
 
 ```
 Agent (work done)
-  ↓ [SYN] Signal intent to report (no data yet)
-  ← [SYN-ACK] Team Lead confirms listening (1s)
-  ↓ [ACK] + full work data (send all results)
-  ← [ROUTING] Team Lead routes to next agent (implicit final ACK)
-  ↓ Go IDLE (guaranteed delivery)
+  v [SYN] Signal intent to report (no data yet)
+  <- [SYN-ACK] Team Lead confirms listening (1s)
+  v [ACK] + full work data (send all results)
+  <- [ROUTING] Team Lead routes to next agent (implicit final ACK)
+  v Go IDLE (guaranteed delivery)
 ```
 
 ### Timeouts (Optimized for Responsiveness)
@@ -50,8 +50,8 @@ Agent (work done)
 | **SYN** | 5s | 3x | 15s | Agent signals ready (no data) |
 | **SYN-ACK** | 1s (TL response) | N/A | 1s | Team Lead acknowledges |
 | **ACK+DATA** | 10s | 2x | 20s | Agent sends full results |
-| **ROUTING** | 5s (detect via polling) | — | 5s | Agent confirms routing received |
-| **Total** | — | — | **41s** | Full handshake guaranteed |
+| **ROUTING** | 5s (detect via polling) | -- | 5s | Agent confirms routing received |
+| **Total** | -- | -- | **41s** | Full handshake guaranteed |
 
 **Why short timeouts:** If Team Lead is listening (as required), 5-10s is more than enough for network + processing. Longer waits mask bugs and waste agent latency.
 
@@ -87,71 +87,71 @@ def handle_ack_data(message_id):
 
 ```
 AGENT SIDE:
-┌──────────────┐
-│ Work Complete│
-└──────┬───────┘
-       │ Generate message_id
-       ▼
-┌──────────────────────┐
-│ Send [SYN]           │────────────────┐
-│ (signal only)        │                │
-└──────┬───────────────┘                │
-       │ Wait 5s                        │
-       ▼                                ▼
++--------------+
+| Work Complete|
+\------+-------+
+       | Generate message_id
+       v
++----------------------+
+| Send [SYN]           |----------------+
+| (signal only)        |                |
+\------+---------------+                |
+       | Wait 5s                        |
+       v                                v
     [SYN-ACK received   [SYN-ACK NOT received]
-     with matching ID]       ↓
-       │                 Resend [SYN]
-       │                 (max 3x, 15s total)
-       ▼                      │
-┌──────────────────────┐      │
-│ Send [ACK] + DATA    │◄─────┘
-│ (full completion)    │
-└──────┬───────────────┘
-       │ Wait 10s for routing
-       │ to next agent
-       ▼
+     with matching ID]       v
+       |                 Resend [SYN]
+       |                 (max 3x, 15s total)
+       v                      |
++----------------------+      |
+| Send [ACK] + DATA    |<-----+
+| (full completion)    |
+\------+---------------+
+       | Wait 10s for routing
+       | to next agent
+       v
     [Routing to next    [NO routing message]
-     agent received]        ↓
-       │              Resend [ACK]+DATA
-       │              (max 2x, 20s total)
-       │                   │
-       └───────────┬───────┘
-                   ▼
-            ┌──────────────┐
-            │ Go IDLE      │
-            │ (confirmed)  │
-            └──────────────┘
+     agent received]        v
+       |              Resend [ACK]+DATA
+       |              (max 2x, 20s total)
+       |                   |
+       \-----------+-------+
+                   v
+            +--------------+
+            | Go IDLE      |
+            | (confirmed)  |
+            \--------------+
 
 TEAM LEAD SIDE:
-┌──────────────────┐
-│ Receive [SYN]    │
-│ from agent       │
-└──────┬───────────┘
-       │ Check: in processed or pending?
-       ▼
-┌──────────────────────┐
-│ Add to pending_ids   │
-│ Send [SYN-ACK]       │ (within 1s)
-│ echo message_id      │
-└──────┬───────────────┘
-       │ Wait for [ACK]+DATA
-       ▼
++------------------+
+| Receive [SYN]    |
+| from agent       |
+\------+-----------+
+       | Check: in processed or pending?
+       v
++----------------------+
+| Add to pending_ids   |
+| Send [SYN-ACK]       | (within 1s)
+| echo message_id      |
+\------+---------------+
+       | Wait for [ACK]+DATA
+       v
     [ACK+DATA received  [No ACK+DATA]
-     with matching ID]       ↓
-       │              Wait, agent will retry
-       │              or escalate
-       ▼
-┌──────────────────────┐
-│ Move to processed    │
-│ Process completion   │
-│ Update progress      │
-└──────┬───────────────┘
-       │
-       ▼
-┌──────────────────────┐
-│ Route to next agent  │ (within 1s)
-│ Include message_id   │ ← Final ACK (implicit)
-└──────────────────────┘
+     with matching ID]       v
+       |              Wait, agent will retry
+       |              or escalate
+       v
++----------------------+
+| Move to processed    |
+| Process completion   |
+| Update progress      |
+\------+---------------+
+       |
+       v
++----------------------+
+| Route to next agent  | (within 1s)
+| Include message_id   | <- Final ACK (implicit)
+\----------------------+
 ```
 
 ### Glossary
@@ -240,7 +240,7 @@ Please advise how to proceed.
 
 ## SendMessage Format Standard (All Team Communications)
 
-**All messages use the unified template** (see `UNIFIED_MESSAGE_TEMPLATE.md`):
+**All messages use the unified template** (see `templates/MESSAGE_TEMPLATE.md`):
 
 ```
 @User: [Feature: name] {subject}
@@ -259,7 +259,7 @@ Please advise how to proceed.
 - For task assignments: include `[Task: id]` for sequencing
 - For cycle work: include `[Cycle: n/m]` context
 
-**Examples:** See UNIFIED_MESSAGE_TEMPLATE.md for all message types (ACK, completion, work rejection, cycle summary, etc.)
+**Examples:** See `templates/MESSAGE_TEMPLATE.md` for all message types (ACK, completion, work rejection, cycle summary, etc.)
 
 ---
 
@@ -343,8 +343,8 @@ When you receive a message like:
 Extract the feature name: **auth_system**
 
 Use it in all file paths and references:
-- Spec file: `_output/FEATURE_SPEC_auth_system.md`
-- Progress file: `_output/FEATURE_auth_system_PROGRESS.md`
+- Spec file: `_output/auth_system/spec.md`
+- Progress file: `_output/auth_system/progress.md`
 - Test file: `tests/test_auth_system.py`
 
 ### Echo in Responses
@@ -365,9 +365,9 @@ This confirms you worked on the correct feature.
 | Scenario | Event | Timeout | Action | Escalate At |
 |----------|-------|---------|--------|------------|
 | **Handshake SYN** | Agent signals completion | 5s | Wait for SYN-ACK | 15s (3 retries) |
-| **Handshake SYN-ACK** | Team Lead responds | 1s | Immediate response | — (built-in) |
+| **Handshake SYN-ACK** | Team Lead responds | 1s | Immediate response | -- (built-in) |
 | **Handshake ACK+DATA** | Agent sends full results | 10s | Wait for DONE | 20s (2 retries) |
-| **Handshake DONE** | Team Lead confirms | 1s | Immediate response | — (built-in) |
+| **Handshake DONE** | Team Lead confirms | 1s | Immediate response | -- (built-in) |
 | **Agent Work** | Agent should report progress | 5 min | Ask for status | 8 min escalate |
 | **Test Output** | Tester monitoring tests | 30s no output | No progress detected | Immediate hang report |
 | | | 15 min absolute | Hard timeout | Kill & report |
@@ -423,7 +423,7 @@ Each phase completes before the next phase begins:
 ### Reading Progress File
 
 Before routing:
-1. Read `_output/FEATURE_[name]_PROGRESS.md`
+1. Read `_output/[name]/progress.md`
 2. Find the first incomplete phase
 3. Route to appropriate agent
 4. Do NOT skip phases
@@ -507,13 +507,13 @@ Status: Blocked, awaiting user guidance
 
 ## Unified Reporting Patterns (All Agents)
 
-**All reports use the unified template** (see `UNIFIED_MESSAGE_TEMPLATE.md`):
+**All reports use the unified template** (see `templates/MESSAGE_TEMPLATE.md`):
 
 Three report types:
 
-1. **ACKNOWLEDGMENT** → `STATUS: ACKNOWLEDGED | READY: no` (send within 60s)
-2. **COMPLETION** → `STATUS: COMPLETE | READY: yes` (send when work done)
-3. **ESCALATION** → `STATUS: ESCALATION | READY: no | BLOCKER: reason` (send when blocked)
+1. **ACKNOWLEDGMENT** -> `STATUS: ACKNOWLEDGED | READY: no` (send within 60s)
+2. **COMPLETION** -> `STATUS: COMPLETE | READY: yes` (send when work done)
+3. **ESCALATION** -> `STATUS: ESCALATION | READY: no | BLOCKER: reason` (send when blocked)
 
 **Key rules:**
 - Always include `@User:`, `[Feature: name]`, and STATUS/READY/BLOCKER fields
@@ -522,7 +522,7 @@ Three report types:
 - List artifacts clearly (files changed, tests created, etc.)
 - **Tester ONLY:** Include TEST_FAILURE lines for all failures (see "Test Failure Reporting Format" section)
 
-**Examples:** See UNIFIED_MESSAGE_TEMPLATE.md for each agent's completion format
+**Examples:** See `templates/MESSAGE_TEMPLATE.md` for each agent's completion format
 
 ---
 
@@ -621,11 +621,11 @@ T=10:00  Tests finish -> Final report sent
 Use `tests/run_tests_safe.py` instead of directly running tests:
 
 **Why:**
-- [OK] Unbuffered output (`-u` flag) — exceptions written to disk immediately
+- [OK] Unbuffered output (`-u` flag) -- exceptions written to disk immediately
 - [OK] Catches all exceptions before process death
-- [OK] Logs to `tests/testResults/run_tests.log` — visible even if tests crash
-- [OK] Never silently dies — all failures are recorded
-- [OK] 30-minute timeout — prevents infinite hangs
+- [OK] Logs to `tests/testResults/run_tests.log` -- visible even if tests crash
+- [OK] Never silently dies -- all failures are recorded
+- [OK] 30-minute timeout -- prevents infinite hangs
 
 **Usage:**
 ```python
@@ -667,17 +667,15 @@ WHEN Monitor completes:
 ## Timestamp Logging (All Agents - Team Mode)
 
 Print timestamps to console at 5 key milestones:
-1. **[TIMESTAMP] Task received** — when work arrives
-2. **[TIMESTAMP] Work started** — when you begin actual work
-3. **[TIMESTAMP] Work in progress** — periodic updates during work
-4. **[TIMESTAMP] Work completed** — when done, before sending report
-5. **[TIMESTAMP] Report sent** — after SendMessage delivery
+1. **[TIMESTAMP] Task received** -- when work arrives
+2. **[TIMESTAMP] Work started** -- when you begin actual work
+3. **[TIMESTAMP] Work in progress** -- periodic updates during work
+4. **[TIMESTAMP] Work completed** -- when done, before sending report
+5. **[TIMESTAMP] Report sent** -- after SendMessage delivery
 
 **Format:** `[2026-04-28 14:32:15] Task received - creating tests`
 
 **Why:** Visibility into agent progress, hang detection (30s+ no output = hung), and debugging.
-
-**Implementation:** See guides/EXAMPLES.md for Python code.
 
 ---
 
@@ -687,7 +685,7 @@ Print timestamps to console at 5 key milestones:
 
 | Agent | Input | Output | Escalation |
 |-------|-------|--------|-----------|
-| **ProductOwner** | Requirements file or user input | `_output/FEATURE_SPEC_*.md` | Ambiguous requirements |
+| **ProductOwner** | Requirements file or user input | `_output/*/spec.md` | Ambiguous requirements |
 | **TestCreator** | Spec file + progress file | `tests/test_*.py` with tests | Unclear test requirements |
 | **Developer** | Spec + test file | Modified implementation files | Same test fails 2x |
 | **Tester** | Test command from Skill | Test results report | Test hangs (30s+ no output) |
@@ -702,7 +700,7 @@ Print timestamps to console at 5 key milestones:
 - Receive requests from Skill (team lead)
 - Send updates via SendMessage to `@User:`
 - Escalate questions to User
-- Progress tracked in `_output/FEATURE_*_PROGRESS.md`
+- Progress tracked in `_output/*/progress.md`
 
 ### Solo Mode (Working directly with user)
 - Receive requests from user
@@ -720,7 +718,7 @@ Most agents work in both modes seamlessly. Just match your communication style t
 
 ### File Location & Format
 
-**Location:** `_output/FEATURE_[feature-name]_PROGRESS.md`
+**Location:** `_output/[feature-name]/progress.md`
 
 **Created by:** ProductOwner at start of workflow
 
@@ -729,7 +727,7 @@ Most agents work in both modes seamlessly. Just match your communication style t
 ### Critical Rule: Update Before Reporting
 
 **BEFORE you send your completion report, you MUST:**
-1. Read the current progress file: `_output/FEATURE_[name]_PROGRESS.md`
+1. Read the current progress file: `_output/[name]/progress.md`
 2. Find your section
 3. Update the relevant status field
 4. Save the file
@@ -754,7 +752,7 @@ Testing: PENDING | IN_PROGRESS | PASSED | FAILED
 
 ## Phase 1: Specification
 [x] Specification created
-Spec file: _output/FEATURE_SPEC_{feature_name}.md
+Spec file: _output/{feature_name}/spec.md
 Completed: [date]
 
 ## Phase 2: Test Creation
@@ -821,7 +819,7 @@ ELSE IF Testing = PASSED -> Feature complete
 
 ### Important Rules
 
-- [RULE] Location is always `_output/FEATURE_[name]_PROGRESS.md`
+- [RULE] Location is always `_output/[name]/progress.md`
 - [RULE] Status values must match exactly (case-sensitive)
 - [RULE] Update BEFORE sending completion report
 - [RULE] List test function names, not test descriptions
@@ -837,12 +835,12 @@ ELSE IF Testing = PASSED -> Feature complete
 
 ### Safe Update Procedure
 
-1. **Read entire file** → Parse into memory
-2. **Locate your section** → Find the part you own (ProductOwner → Phase 1, TestCreator → Test names, etc.)
-3. **Merge your changes** → Update only your section in the in-memory version
-4. **Write atomically** → Single file write operation (not multiple writes)
-5. **On conflict (write fails)** → Retry up to 3 times with 1-second backoff between attempts
-6. **On persistent failure** → Escalate immediately (something is wrong)
+1. **Read entire file** -> Parse into memory
+2. **Locate your section** -> Find the part you own (ProductOwner -> Phase 1, TestCreator -> Test names, etc.)
+3. **Merge your changes** -> Update only your section in the in-memory version
+4. **Write atomically** -> Single file write operation (not multiple writes)
+5. **On conflict (write fails)** -> Retry up to 3 times with 1-second backoff between attempts
+6. **On persistent failure** -> Escalate immediately (something is wrong)
 
 ### Implementation Example (Python)
 
@@ -851,7 +849,7 @@ import time
 
 def update_progress_file_safely(feature_name, section_name, new_content):
     """Update progress file with atomic write and retry logic."""
-    progress_file = f"_output/FEATURE_{feature_name}_PROGRESS.md"
+    progress_file = f"_output/{feature_name}/progress.md"
     max_retries = 3
     
     for attempt in range(max_retries):
@@ -891,7 +889,7 @@ def update_progress_file_safely(feature_name, section_name, new_content):
                 time.sleep(1)  # Backoff
                 continue
             else:
-                # [6] Persistent failure — escalate
+                # [6] Persistent failure -- escalate
                 raise Exception(f"Failed to update progress file after {max_retries} attempts: {e}")
 ```
 
@@ -918,20 +916,20 @@ def update_progress_file_safely(feature_name, section_name, new_content):
 
 ```
 RECEIVE WORK
-↓
+v
 Send ACK within 60s (via SendMessage if team)
-↓
+v
 BEGIN WORK
-↓
+v
 Work proceeds normally, or...
-↓ [Question?] -> ESCALATE IMMEDIATELY
-↓ [Stuck?] -> ESCALATE IMMEDIATELY
-↓ [Hang?] -> ESCALATE IMMEDIATELY
-↓
+v [Question?] -> ESCALATE IMMEDIATELY
+v [Stuck?] -> ESCALATE IMMEDIATELY
+v [Hang?] -> ESCALATE IMMEDIATELY
+v
 COMPLETE WORK
-↓
+v
 Send completion report (via SendMessage if team)
-↓
+v
 DONE
 ```
 

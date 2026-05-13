@@ -23,27 +23,27 @@ instructions. The instructions point at project markdown docs that the agent
 reads at runtime.
 
 ```
-sage-feature-team/                       ← this repo (the system)
-├── agents/
-│   ├── _BASE.md                         ← shared protocol + {PROJECT_INSTRUCTIONS} hook
-│   ├── product-owner.md                 ← generic job
-│   ├── test-creator.md                  ← generic job
-│   ├── developer.md                     ← generic job
-│   └── tester.md                        ← generic job
-├── _tools/
-│   ├── load_agents.py                   ← assembles agent prompts
-│   └── setup_project.py                 ← scaffolds .sage/ in a new project
-├── HANDBOOK.md                          ← protocol details (handshake, ACK, etc.)
-├── sage-config.yaml                     ← team/path config (this is for chatbot)
-└── examples/chatbot/.sage/              ← reference configs
+sage-feature-team/                       <- this repo (the system)
++-- agents/
+|   +-- _BASE.md                         <- shared protocol + {PROJECT_INSTRUCTIONS} hook
+|   +-- product-owner.md                 <- generic job
+|   +-- test-creator.md                  <- generic job
+|   +-- developer.md                     <- generic job
+|   \-- tester.md                        <- generic job
++-- _tools/
+|   +-- load_agents.py                   <- assembles agent prompts
+|   \-- setup_project.py                 <- scaffolds .sage/ in a new project
++-- HANDBOOK.md                          <- protocol details (handshake, ACK, etc.)
++-- sage-config.yaml                     <- team/path config (this is for chatbot)
+\-- examples/chatbot/.sage/              <- reference configs
 
-<your-project>/                          ← e.g. ~/StudioProjects/Breadcrumbs
-├── sage-config.yaml                     ← created by setup wizard
-└── .sage/
-    ├── sage-product-owner-config.yaml   ← project's instructions for ProductOwner
-    ├── sage-test-creator-config.yaml    ← project's instructions for TestCreator
-    ├── sage-developer-config.yaml       ← project's instructions for Developer
-    └── sage-tester-config.yaml          ← project's instructions for Tester
+<your-project>/                          <- e.g. ~/StudioProjects/Breadcrumbs
++-- sage-config.yaml                     <- created by setup wizard
+\-- .sage/
+    +-- sage-product-owner-config.yaml   <- project's instructions for ProductOwner
+    +-- sage-test-creator-config.yaml    <- project's instructions for TestCreator
+    +-- sage-developer-config.yaml       <- project's instructions for Developer
+    \-- sage-tester-config.yaml          <- project's instructions for Tester
 ```
 
 ---
@@ -59,11 +59,11 @@ sage-feature-team/                       ← this repo (the system)
    - Substitutes the instructions list into `{PROJECT_INSTRUCTIONS}` in `_BASE.md`
 4. Skill creates a team and spawns the four agents with their fully-rendered prompts
 5. Each agent reads its referenced project files (test guides, code conventions, etc.) using the Read tool when relevant
-6. Skill routes work through ProductOwner → TestCreator → Developer ↔ Tester until tests pass or max cycles hit
+6. Skill routes work through ProductOwner -> TestCreator -> Developer <-> Tester until tests pass or max cycles hit
 
 Two modes:
-- **full** — all four agents (spec → tests → code → validation)
-- **dev-test-only** — Developer + Tester (tests already exist; fix and verify)
+- **full** -- all four agents (spec -> tests -> code -> validation)
+- **dev-test-only** -- Developer + Tester (tests already exist; fix and verify)
 
 ---
 
@@ -111,10 +111,31 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 | `templates/MESSAGE_TEMPLATE.md` | Standard SendMessage format |
 | `templates/PROGRESS_TEMPLATE.md` | Progress file template |
 | `guides/ORCHESTRATOR_PATTERNS.md` | Reusable Skill/Team Lead patterns |
-| `references/ROUTING_REFERENCE.md` | Routing decision tree |
 | `examples/chatbot/.sage/` | Reference `.sage/` configs for the chatbot project |
-| `.claude/skills/sage-feature-team/SKILL.md` | The user-facing skill (full workflow) |
-| `.claude/skills/sage-dev-test/SKILL.md` | The user-facing skill (dev-test cycles) |
+| `.claude/skills/sage-feature-team/SKILL.md` | Full team workflow (PO -> TestCreator -> Developer <-> Tester) |
+| `.claude/skills/sage-dev-test/SKILL.md` | Dev/test cycles only (Developer + Tester team) |
+| `.claude/skills/sage-po/SKILL.md` | Single-agent inline: ProductOwner -- create spec + stories |
+| `.claude/skills/sage-test-creator/SKILL.md` | Single-agent inline: TestCreator -- write tests for the next ready story |
+| `.claude/skills/sage-developer/SKILL.md` | Single-agent inline: Developer -- implement code for the next IN_DEV story |
+| `.claude/skills/sage-tester/SKILL.md` | Single-agent inline: Tester -- validate tests for the next TESTING story (or `--full` regression) |
+
+---
+
+## Per-Agent Skills (Inline)
+
+In addition to the team-orchestrated skills, each agent can be invoked individually
+inline (no team, no handshake protocol -- the main conversation acts as the agent):
+
+| Skill | Picks up | Override |
+|---|---|---|
+| `/sage-po "<feature description>"` | n/a -- creates a new spec + stories file | `--feature <name>` to set feature_name explicitly |
+| `/sage-test-creator [STORY-N]` | Next story at `TODO` whose dependencies are all `DONE` | Pass `STORY-N` to target a specific story |
+| `/sage-developer [STORY-N]` | Next story at `IN_DEV` | Pass `STORY-N` to target a specific story |
+| `/sage-tester [STORY-N] [--full]` | Next story at `TESTING` (story-scoped tests) | `STORY-N` to target a specific story; `--full` for regression |
+
+All four also accept `--feature <feature_name>` if multiple feature folders
+exist under `_output/`. Otherwise, the feature is auto-detected (single match)
+or the skill asks the user (multiple matches).
 
 ---
 
@@ -126,4 +147,4 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 4. Update the routing logic in `.claude/skills/sage-feature-team/SKILL.md`
 5. Each project then creates `.sage/sage-<new-role>-config.yaml` to give it project-specific guidance
 
-The hook (`{PROJECT_INSTRUCTIONS}`) is in `_BASE.md` — every agent gets it automatically.
+The hook (`{PROJECT_INSTRUCTIONS}`) is in `_BASE.md` -- every agent gets it automatically.

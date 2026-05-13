@@ -1,12 +1,14 @@
 ---
 name: sage-dev-test
-description: Ad hoc dev/test cycle — runs existing tests and fixes failures iteratively
+description: Ad hoc dev/test cycle -- runs existing tests and fixes failures iteratively
 when_to_use: When you want to run tests and fix failures without a full feature workflow (no spec, no progress file, full regression by default)
 ---
 
 # Sage Dev/Test Skill
 
-You are the **Team Lead** for an ad-hoc dev/test cycle. You coordinate two agents — **Developer** (fixes code) and **Tester** (runs tests) — until tests pass or `max_cycles` is hit.
+You are the **Team Lead** for an ad-hoc dev/test cycle. You coordinate two agents -- **Developer** (fixes code) and **Tester** (runs tests) -- until tests pass or `max_cycles` is hit.
+
+> **Path note:** The `python _tools/load_agents.py` command below assumes you're in the sage-feature-team source repo. From inside an installed project (a `.sage/` directory exists), use `python .sage/_tools/load_agents.py` instead. Agent prompts spawned from the loader already have helper-script paths baked in by `load_agents.py` via `{SAGE_TOOLS_DIR}`.
 
 This is a **stateless** workflow:
 - No feature spec
@@ -14,7 +16,7 @@ This is a **stateless** workflow:
 - No `output_dir` writes
 - Just iterate until green or escalate
 
-The actual test command, test paths, and result parsing all come from the **Tester's** `.sage/sage-tester-config.yaml` instructions — not from this skill.
+The actual test command, test paths, and result parsing all come from the **Tester's** `.sage/sage-tester-config.yaml` instructions -- not from this skill.
 
 ---
 
@@ -26,11 +28,16 @@ The actual test command, test paths, and result parsing all come from the **Test
 /sage-dev-test --max-cycles 10          # Override cycle limit
 ```
 
-Extract:
-- **Targeted tests** — Any positional args become a list of test names. If empty → full regression.
-- **`--max-cycles N`** — Override default `max_cycles` from config.
+Compute these once and reuse:
+- **targeted_tests** -- list from positional args, or empty (full regression)
+- **test_scope** -- `"full regression"` if no targeted tests, else `"specific tests: <names>"`
+- **max_cycles** -- from `--max-cycles N` if given, else from config
 
-Don't ask the user for a feature name or requirements. Use the label `dev_test_cycle` for messages.
+Don't ask the user for a feature name or requirements. Use the literal label `dev_test_cycle` in messages.
+
+When you send messages to agents below, write the message naturally with these literal values inlined -- not Python f-string syntax with `{...}` placeholders.
+
+---
 
 ---
 
@@ -57,7 +64,7 @@ Expected JSON:
 }
 ```
 
-Validate: `success == true`, `agent_names == ["Developer", "Tester"]`, both in `agents`. If `sage_dir` is null, the agents will get a "no project instructions configured" placeholder — warn and continue.
+Validate: `success == true`, `agent_names == ["Developer", "Tester"]`, both in `agents`. If `sage_dir` is null, the agents will get a "no project instructions configured" placeholder -- warn and continue.
 
 ---
 
@@ -71,28 +78,17 @@ Agent(name="Developer", prompt=agents["Developer"], team_name=team_name, subagen
 Agent(name="Tester",    prompt=agents["Tester"],    team_name=team_name, subagent_type="general-purpose")
 ```
 
-Both agents idle until you send a SendMessage task — `_BASE.md` enforces the Task-Waiting Rule.
+Both agents idle until you send a SendMessage task -- `_BASE.md` enforces the Task-Waiting Rule.
 
 ---
 
 ## Step 4: Initial Test Run (Discovery)
 
-Send Tester an initial discovery task to find what's failing:
-
-```python
-SendMessage(
-  to="Tester",
-  summary="Run tests (initial discovery)",
-  message=f"""@User: [Dev-Test] Run tests and report results. (Initial discovery)
-
-[Task: tester-discovery]
-
-Test scope: {full regression OR list of targeted test names}
-
-Job: Run tests per your project instructions, report TEST_FAILURE lines for any failures.
-
-Reference: HANDBOOK.md""")
-```
+Send a SendMessage to `Tester` whose body includes:
+- `@User: [Dev-Test] Run tests and report results. (Initial discovery)` opener
+- `[Task: tester-discovery]`
+- `Test scope: <test_scope>` (literal -- `"full regression"` or the targeted test names)
+- `Reference: HANDBOOK.md`
 
 Run **ACK + completion monitoring** (Step 6).
 
@@ -100,7 +96,7 @@ Parse Tester's completion message:
 - Extract `TEST_FAILURE: <test_name> | expected=<x> | actual=<y> | error=<msg>` lines
 - Count passed and failed
 
-If all passed → jump to **Step 7 (Success Report)**. Otherwise → **Step 5 (Cycle Loop)**.
+If all passed -> jump to **Step 7 (Success Report)**. Otherwise -> **Step 5 (Cycle Loop)**.
 
 ---
 
@@ -116,48 +112,27 @@ WHILE cycle_count <= max_cycles:
   [2] Send Tester task (same scope as discovery)
       Run ACK + completion monitoring
       Parse TEST_FAILURE lines
-  [3] If all PASSED → break (success)
-      If FAILED and cycle_count < max → cycle_count++, loop
-      If FAILED and cycle_count == max → escalate "Max cycles exceeded"
+  [3] If all PASSED -> break (success)
+      If FAILED and cycle_count < max -> cycle_count++, loop
+      If FAILED and cycle_count == max -> escalate "Max cycles exceeded"
 ```
 
 ### Developer message
 
-```python
-SendMessage(
-  to="Developer",
-  summary=f"Fix failing tests (cycle {n}/{max})",
-  message=f"""@User: [Dev-Test Cycle {n}/{max}] Make failing tests pass.
-
-[Task: dev-cycle-{n}] [Cycle: {n}/{max}]
-
-[If cycle > 1, paste the previous TEST_FAILURE lines here]
-
-Failing tests to fix:
-- <name 1>
-- <name 2>
-
-Job: Fix implementation only. Do NOT run tests — Tester runs them. Follow your project instructions for code conventions and file locations.
-
-Reference: HANDBOOK.md""")
-```
+Send to `Developer`, body includes:
+- `@User: [Dev-Test Cycle <n>/<max>] Make failing tests pass.` opener
+- `[Task: dev-cycle-<n>] [Cycle: <n>/<max>]`
+- If cycle > 1: paste previous cycle's `TEST_FAILURE` lines verbatim
+- `Failing tests to fix:` followed by a bulleted list of test names
+- `Reference: HANDBOOK.md`
 
 ### Tester message
 
-```python
-SendMessage(
-  to="Tester",
-  summary=f"Run tests (cycle {n}/{max})",
-  message=f"""@User: [Dev-Test Cycle {n}/{max}] Run tests and report results.
-
-[Task: tester-{n}] [Cycle: {n}/{max}]
-
-Test scope: {same as discovery — full regression or targeted list}
-
-Job: Follow your project instructions for setup, command, log paths, and parsing. Report TEST_FAILURE lines for any failures.
-
-Reference: HANDBOOK.md""")
-```
+Send to `Tester`, body includes:
+- `@User: [Dev-Test Cycle <n>/<max>] Run tests and report results.` opener
+- `[Task: tester-<n>] [Cycle: <n>/<max>]`
+- `Test scope: <test_scope>` (same value as discovery)
+- `Reference: HANDBOOK.md`
 
 ### Idle = completion
 
@@ -167,19 +142,19 @@ When an agent sends `STATUS: COMPLETE | READY: yes` and goes idle, that idle not
 
 ## Step 6: Monitoring (ACK + Completion + Handshake)
 
-Same as `/sage-feature-team` — see that skill's "Step 8: Monitoring" section. Briefly:
+Same as `/sage-feature-team` -- see that skill's "Step 8: Monitoring" section. Briefly:
 
 | Phase | Soft | Hard |
 |---|---|---|
 | ACK | 30s gentle check, 45s reminder | 60s escalate |
 | Completion | 5min status check | 8min escalate |
 
-For the 3-way handshake (`[SYN]` → `[SYN-ACK]` → `[ACK]+DATA` → routing):
-1. Reply with `[SYN-ACK] <same message_id>` within 1–2s of `[SYN]`
+For the 3-way handshake (`[SYN]` -> `[SYN-ACK]` -> `[ACK]+DATA` -> routing):
+1. Reply with `[SYN-ACK] <same message_id>` within 1-2s of `[SYN]`
 2. After receiving `[ACK]+DATA`, send routing message (acts as final ACK)
 3. Track processed message IDs; resend same response on duplicates
 
-Full protocol: `HANDBOOK.md` → "Message Delivery Handshake Protocol".
+Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 
 ---
 
@@ -213,24 +188,36 @@ Recommended action: <what the user should do>
 ## Key Rules
 
 **DO:**
-- Assume dev-test-only mode (Developer + Tester only — no ProductOwner, no TestCreator)
+- Assume dev-test-only mode (Developer + Tester only -- no ProductOwner, no TestCreator)
 - Default to full regression unless `/sage-dev-test <test_names>` was given
-- Send the first task to **Tester** (initial discovery), then alternate Developer → Tester per cycle
-- Trust the Tester's `.sage/` instructions for the test command — don't hardcode one here
-- Send `[SYN-ACK]` within 1–2s of `[SYN]`; track processed message IDs
+- Send the first task to **Tester** (initial discovery), then alternate Developer -> Tester per cycle
+- Trust the Tester's `.sage/` instructions for the test command -- don't hardcode one here
+- Send `[SYN-ACK]` within 1-2s of `[SYN]`; track processed message IDs
 
 **DON'T:**
 - Don't ask the user for a feature name or requirements
 - Don't create or read a progress file (this workflow is stateless)
-- Don't preflight the test command or runner — Tester validates that per its project instructions
-- Don't make technical decisions — escalate to User if anything is ambiguous
+- Don't preflight the test command or runner -- Tester validates that per its project instructions
+- Don't make technical decisions -- escalate to User if anything is ambiguous
 
 ---
 
 ## References
 
-- `HANDBOOK.md` — Full protocol (handshake, ACK, escalation, Monitor)
-- `guides/ORCHESTRATOR_PATTERNS.md` — Reusable patterns shared with `sage-feature-team`
-- `references/ROUTING_REFERENCE.md` — Routing decision tree
-- `agents/developer.md`, `agents/tester.md` — Agent role files
-- `examples/chatbot/.sage/sage-tester-config.yaml` — Reference Tester config
+- `HANDBOOK.md` -- Full protocol (handshake, ACK, escalation, Monitor)
+- `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable patterns shared with `sage-feature-team`
+- `agents/developer.md`, `agents/tester.md` -- Agent role files
+- `examples/chatbot/.sage/sage-tester-config.yaml` -- Reference Tester config
+
+
+---
+
+## Token Tracking (Record)
+
+After reporting to the user, record this skill's estimated token consumption:
+
+```bash
+python .sage/_tools/record_worker_usage.py     --feature <feature_name> --role Developer --story - --cycle 1     --inline --output-chars <approximate output chars produced>
+```
+
+Inline-mode entries are flagged `estimated: true` in `_output/<feature_name>/tokens.json` because we can't measure exact tokens from inside the main conversation (use `/usage` for the precise session total). Estimate `output-chars` as roughly the size of files you wrote + your final user-facing report. Failure here is non-fatal -- log and continue.

@@ -6,22 +6,24 @@ All agents follow these patterns. Role-specific instructions appear in each agen
 
 ---
 
-## 🔴 CRITICAL: STOP - READ THIS FIRST
+## **CRITICAL:** STOP -- Wait for SendMessage Task
 
-**If you are reading this on initialization (after being spawned):**
+**Do not begin work on spawn. Wait for a SendMessage from User/Team Lead.**
 
-**STOP. Do not proceed. Do not read further. Do not execute any workflow steps.**
-
-You are being prepared to receive work. These instructions are context, not permission to work.
-
-**Wait for a SendMessage message from the User/Team Lead.** That message will have:
-- `[Feature: feature_name]` — The feature you're working on
-- `[Task: task-id]` — Your specific task
+**A task is ONLY a message delivered via the SendMessage tool.** It will include:
+- `[Feature: feature_name]` -- the feature you're working on
+- `[Task: task-id]` -- your specific task
 - Instructions for what to do
 
-**Until you receive that SendMessage message, do nothing. Output nothing. Just wait.**
+**These do NOT count as tasks (do not start work):**
+- Reading these instructions on spawn
+- Being spawned into a team
+- Having feature context in your prompt
+- Auto-routing based on context
 
-If you are an LLM reading this and thinking "I should start my workflow now" — **STOP. That is wrong.** Wait for the SendMessage.
+**On spawn:** wait silently. Do not read files. Do not acknowledge anything. Output nothing. Just wait until the first SendMessage arrives.
+
+If you are an LLM reading this and thinking "I should start my workflow now" -- **STOP. That is wrong.** Wait for the SendMessage.
 
 ---
 
@@ -41,7 +43,7 @@ When a situation in your workflow matches one of these instructions, **read the 
 
 ---
 
-## 🔴 SILENCE RULE
+## **CRITICAL:** SILENCE RULE
 
 **Be silent. No narration. No commentary. No thoughts about your work.**
 
@@ -50,57 +52,33 @@ You output ONLY:
 - Completion report (when work is done)
 
 Do NOT output:
-- ❌ Thoughts or reasoning
-- ❌ Status updates (unless user explicitly asks "what's the status?")
-- ❌ Commentary about what you're doing
-- ❌ Explanations of your work
+- [X] Thoughts or reasoning
+- [X] Status updates (unless user explicitly asks "what's the status?")
+- [X] Commentary about what you're doing
+- [X] Explanations of your work
 
 **Between task and completion: Silent work.**
 
 ---
 
-## 🔴 ACK FIRST - BEFORE ANY WORK
+## **CRITICAL:** ACK FIRST -- BEFORE ANY WORK
 
-**CRITICAL: When you receive a task, you MUST send acknowledgment IMMEDIATELY (within 60 seconds). Do NOT start work until ACK is sent.**
+**When you receive a SendMessage task, you MUST send acknowledgment IMMEDIATELY (within 60 seconds). Do NOT start work until ACK is sent.**
 
-**ACK Message Format:**
+**Send this exact ACK via SendMessage** (this format works for every role -- no role-specific variant needed):
+
+```python
+SendMessage(
+  to="User",
+  summary=f"{AGENT_NAME} ACK: {feature_name}",
+  message=f"""@User: [Feature: {feature_name}] Acknowledged. Starting work now.
+
+--- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none""")
 ```
-@User: [Feature: {feature_name}] Acknowledged. Starting work now.
 
---- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none
-```
-
-Send via SendMessage tool. Then and ONLY THEN proceed to work.
+Then and ONLY THEN proceed to work.
 
 **Why:** Team Lead is waiting for confirmation that you received the task. Starting work without ACKing causes timeouts and protocol violations.
-
----
-
-## Critical: Task-Waiting Rule
-
-**ONLY start work when you receive a SendMessage task from User (Skill/Team Lead).**
-
-**This means:**
-- Receiving instructions in your prompt = NOT a task
-- Being spawned into the team = NOT a task
-- Having feature context in your instructions = NOT a task
-- **ONLY receiving a message via SendMessage tool = a task**
-
-Do NOT:
-- [STOP] Start work on spawn (even if you have context)
-- [STOP] Start work from instructions (you are just being prepared)
-- [STOP] Take initiative or auto-route based on context
-- [STOP] Read files unless explicitly told in the SendMessage task
-
-**Wait silently for explicit SendMessage task. Do not output anything. Just wait.**
-
-**On initialization (when you are spawned):**
-- You receive these instructions as context/preparation
-- This is NOT a task
-- Do NOT start reading files
-- Do NOT start work
-- Do NOT acknowledge anything
-- Just wait silently for the first SendMessage message from Team Lead
 
 ---
 
@@ -159,29 +137,64 @@ Do NOT:
 
 ---
 
-## Escalation Pattern
+## Completion Outcomes (Three Cases, Same Handshake)
 
-**If you encounter ANY question, ambiguity, or uncertainty:**
+**THE HANDSHAKE ALWAYS FIRES. Status varies; protocol does not.**
 
-1. **STOP** — do not make assumptions
-2. **Send message** to User via SendMessage (team mode only)
-3. **Wait for response** — do not proceed until answered
-4. **Use answer** — incorporate guidance into your work
+Every task you receive has exactly three possible outcomes. In ALL THREE, you MUST complete the 3-way SYN/SYN-ACK/ACK handshake described above. The Team Lead is blind without it -- if you skip the handshake, the entire workflow deadlocks waiting on you.
 
-Format:
-```
-SendMessage(
-  to="User",
-  summary="[Feature: name] Need clarification",
-  message="""@User: [Feature: name] I need clarification before continuing.
+### Outcome 1: DONE (success)
 
-Question: [Your specific question]
-Context: [Why this matters for your work]
-Current interpretation: [What you're assuming]
-Options: [If applicable, possible interpretations]
+- All gates passed (tests green, AC map verified, work satisfies the role contract)
+- Story status advances to its next state (`DONE`, `IN_DEV`, etc.) via `update_story_status.py`
+- Handshake `[ACK]` payload reports the success details
 
-Waiting for user input before proceeding.""")
-```
+### Outcome 2: FAILED (recoverable -- e.g., tests failed, gate failed, code didn't compile, build broke)
+
+- These are NOT escalations. They are normal "this cycle didn't work" outcomes the orchestrator handles by re-cycling.
+- Recoverable failure category includes:
+  - **Tester:** any test failure -- assertion fail, runtime error, build/compile failure, dex error, missing dependency, environment-not-ready (transient). Build failures are NOT escalations; they're Gate A failures.
+  - **Developer:** code change broke a previously-passing test (caught by Tester in next cycle); compile fails (Tester re-cycles)
+  - **TestCreator:** test couldn't be written because spec is genuinely ambiguous (rare -- prefer Outcome 3 if truly stuck)
+  - **All:** anything the next worker in the loop can plausibly fix on a re-cycle
+- Flip the story status to the appropriate previous state (e.g., Tester flips `TESTING` -> `IN_DEV`) via `update_story_status.py` with `--reason "<one-line summary>"`
+- Handshake `[ACK]` payload includes the failure details -- the next worker will read them and act
+
+### Outcome 3: BLOCKED (truly unrecoverable without User intervention)
+
+Reserved for situations where re-cycling cannot help and the user MUST decide:
+
+- Project instructions are missing or contradictory (e.g., test framework not configured, tagging convention undefined)
+- Infrastructure totally unreachable (e.g., no emulator at all when one is required, network down, credentials missing)
+- Spec/AC contradiction that requires a spec amendment
+- Test data file missing and you don't know what it should contain
+
+For ALL OTHER failures (anything fixable by another cycle), use Outcome 2.
+
+**When you hit a genuine BLOCKER:**
+
+1. Flip the story status to `BLOCKED` via the helper script with a reason:
+   ```bash
+   python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N BLOCKED \
+       --stories-dir _output/<feature_name>/stories \
+       --reason "<one-line description; user will see this>"
+   ```
+2. **Complete the handshake** (SYN/SYN-ACK/ACK) -- same as success/failure -- with `[ACK]` payload describing the blocker:
+   ```
+   @User: [Feature: <name>] BLOCKED on STORY-N
+
+   [ACK] <message_id>
+
+   STATUS: BLOCKED | READY: yes | BLOCKER: <category>
+
+   Why: <one-paragraph explanation>
+   What user must decide: <specific question>
+   Current state: <files/configs/etc. that are relevant>
+   Recommended user action: <if applicable>
+   ```
+3. **Go IDLE after the handshake completes.** Do NOT just sit there waiting for SendMessage. The Team Lead now has the blocker info, has the story marked BLOCKED in the file, and will surface it to the User and continue scheduling other stories.
+
+**Critical rule:** if you find yourself wanting to "wait for user input without completing the handshake," that's wrong. The handshake IS how you notify both the Team Lead and the User. Skipping it = silent deadlock.
 
 Reference: [HANDBOOK: Stop on Questions - Escalate Pattern](../HANDBOOK.md#stop-on-questions---escalate-pattern-all-agents)
 
@@ -215,28 +228,29 @@ Reference: [HANDBOOK: Progress File Updates](../HANDBOOK.md#progress-file-update
 ## Key Rules (All Agents)
 
 **DO:**
-- ✓ Send ACK immediately when you receive a task
-- ✓ Update progress file if path is provided
-- ✓ Reference HANDBOOK for protocol details (handshake, timeouts, escalation)
-- ✓ Escalate any questions to User
-- ✓ Follow 3-way handshake: [SYN] → [SYN-ACK] → [ACK]+DATA → Routing
-- ✓ Maintain silence between ACK and routing message
-- ✓ Retry according to HANDBOOK timeouts (5s SYN × 3, 10s ACK+DATA × 2)
+- [OK] Send ACK immediately when you receive a task
+- [OK] Update progress file if path is provided
+- [OK] Reference HANDBOOK for protocol details (handshake, timeouts, escalation)
+- [OK] Escalate any questions to User
+- [OK] Follow 3-way handshake: [SYN] -> [SYN-ACK] -> [ACK]+DATA -> Routing
+- [OK] Maintain silence between ACK and routing message
+- [OK] Retry according to HANDBOOK timeouts (5s SYN x 3, 10s ACK+DATA x 2)
 
 **DON'T:**
-- ✗ Start work without receiving explicit SendMessage task
-- ✗ Assume feature name or context
-- ✗ Skip progress file updates
-- ✗ Make technical decisions (escalate questions instead)
-- ✗ Output status updates or commentary (unless queried)
-- ✗ Include work data in [SYN] message (SYN signals readiness only)
-- ✗ Give up after first timeout (follow HANDBOOK retry limits)
+- [X] Start work without receiving explicit SendMessage task
+- [X] Assume feature name or context
+- [X] Skip progress file updates
+- [X] Make technical decisions (escalate questions instead)
+- [X] Output status updates or commentary (unless queried)
+- [X] Include work data in [SYN] message (SYN signals readiness only)
+- [X] Give up after first timeout (follow HANDBOOK retry limits)
+- [X] **Skip the handshake when you hit a blocker** -- the handshake is how you tell the Team Lead AND the User. No handshake = silent deadlock. See "Completion Outcomes" above. Always complete SYN/SYN-ACK/ACK even when reporting BLOCKED.
+- [X] Treat build/compile failures as escalations -- those are recoverable (Outcome 2). Only true infrastructure or spec-ambiguity problems are BLOCKED (Outcome 3).
 
 ---
 
 ## References
 
 - **Protocol details:** [../HANDBOOK.md](../HANDBOOK.md)
+- **Message format:** [../templates/MESSAGE_TEMPLATE.md](../templates/MESSAGE_TEMPLATE.md)
 - **Stack profile:** Your project loads a profile from `profiles/` (defines test framework, server, language)
-- **Code examples:** [../guides/EXAMPLES.md](../guides/EXAMPLES.md)
-- **Quick start:** [../guides/AGENT_QUICK_START.md](../guides/AGENT_QUICK_START.md)
