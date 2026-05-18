@@ -33,7 +33,7 @@ sage-feature-team/                       <- this repo (the system)
 +-- _tools/
 |   +-- load_agents.py                   <- assembles agent prompts
 |   \-- setup_project.py                 <- scaffolds .sage/ in a new project
-+-- HANDBOOK.md                          <- protocol details (handshake, ACK, etc.)
++-- HANDBOOK.md                          <- protocol details (completion reporting, escalation, etc.)
 +-- sage-config.yaml                     <- team/path config (this is for chatbot)
 \-- examples/chatbot/.sage/              <- reference configs
 
@@ -102,7 +102,7 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 |---|---|
 | `agents/_BASE.md` | Shared protocol + the `{PROJECT_INSTRUCTIONS}` hook |
 | `agents/<role>.md` | Generic job description per agent |
-| `HANDBOOK.md` | Full protocol details (handshake, ACK, escalation, Monitor) |
+| `HANDBOOK.md` | Full protocol details (completion reporting model, escalation, Monitor) |
 | `sage-config.yaml` | This project's team/paths config (chatbot example) |
 | `sage-config.SCHEMA.md` | Field reference for `sage-config.yaml` |
 | `_tools/load_agents.py` | Assembles agent prompts; finds `.sage/`; substitutes vars |
@@ -124,7 +124,7 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 ## Per-Agent Skills (Inline)
 
 In addition to the team-orchestrated skills, each agent can be invoked individually
-inline (no team, no handshake protocol -- the main conversation acts as the agent):
+inline (no team, no protocol overhead -- the main conversation acts as the agent):
 
 | Skill | Picks up | Override |
 |---|---|---|

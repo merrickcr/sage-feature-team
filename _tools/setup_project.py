@@ -8,14 +8,17 @@ After install, the project is self-contained -- no dependency on the source
 checkout.
 
 What it copies (always overwritten on re-run):
-  agents/                              -> <project>/.sage/agents/
+  agents/                              -> <project>/.sage/agents/   (5 roles + _BASE)
   _tools/load_agents.py                -> <project>/.sage/_tools/load_agents.py
   _tools/update_story_status.py        -> <project>/.sage/_tools/update_story_status.py
+  _tools/update_epic_status.py         -> <project>/.sage/_tools/update_epic_status.py
   _tools/verify_ac_map.py              -> <project>/.sage/_tools/verify_ac_map.py
+  _tools/verify_epic.py                -> <project>/.sage/_tools/verify_epic.py
   _tools/extract_token_usage.py        -> <project>/.sage/_tools/extract_token_usage.py
   _tools/record_worker_usage.py        -> <project>/.sage/_tools/record_worker_usage.py
   _tools/discover_and_record.py        -> <project>/.sage/_tools/discover_and_record.py
   _tools/list_eligible.py              -> <project>/.sage/_tools/list_eligible.py
+  _tools/rollup_status.py              -> <project>/.sage/_tools/rollup_status.py
   HANDBOOK.md                          -> <project>/.sage/HANDBOOK.md
   sage-config.SCHEMA.md                -> <project>/.sage/sage-config.SCHEMA.md
   templates/                           -> <project>/.sage/templates/
@@ -32,6 +35,7 @@ What it scaffolds (NEVER overwritten on re-run):
   <project>/.sage/sage-test-creator-config.yaml
   <project>/.sage/sage-developer-config.yaml
   <project>/.sage/sage-tester-config.yaml
+  <project>/.sage/sage-epic-verifier-config.yaml
   <project>/sage-config.yaml
 
 SKILL.md files are rewritten on copy so paths reference `.sage/...` (since
@@ -59,13 +63,17 @@ SAGE_FILES = [
     ("agents/test-creator.md",                   "agents/test-creator.md"),
     ("agents/developer.md",                      "agents/developer.md"),
     ("agents/tester.md",                         "agents/tester.md"),
+    ("agents/epic-verifier.md",                  "agents/epic-verifier.md"),
     ("_tools/load_agents.py",                    "_tools/load_agents.py"),
     ("_tools/update_story_status.py",            "_tools/update_story_status.py"),
+    ("_tools/update_epic_status.py",             "_tools/update_epic_status.py"),
     ("_tools/verify_ac_map.py",                  "_tools/verify_ac_map.py"),
+    ("_tools/verify_epic.py",                    "_tools/verify_epic.py"),
     ("_tools/extract_token_usage.py",            "_tools/extract_token_usage.py"),
     ("_tools/record_worker_usage.py",            "_tools/record_worker_usage.py"),
     ("_tools/discover_and_record.py",            "_tools/discover_and_record.py"),
     ("_tools/list_eligible.py",                  "_tools/list_eligible.py"),
+    ("_tools/rollup_status.py",                  "_tools/rollup_status.py"),
     ("HANDBOOK.md",                              "HANDBOOK.md"),
     ("sage-config.SCHEMA.md",                    "sage-config.SCHEMA.md"),
     ("templates/MESSAGE_TEMPLATE.md",            "templates/MESSAGE_TEMPLATE.md"),
@@ -96,11 +104,14 @@ SKILL_FILES = [
 SKILL_PATH_REWRITES = [
     ("python _tools/load_agents.py",                          "python .sage/_tools/load_agents.py"),
     ("python _tools/update_story_status.py",                  "python .sage/_tools/update_story_status.py"),
+    ("python _tools/update_epic_status.py",                   "python .sage/_tools/update_epic_status.py"),
     ("python _tools/verify_ac_map.py",                        "python .sage/_tools/verify_ac_map.py"),
+    ("python _tools/verify_epic.py",                          "python .sage/_tools/verify_epic.py"),
     ("python _tools/extract_token_usage.py",                  "python .sage/_tools/extract_token_usage.py"),
     ("python _tools/record_worker_usage.py",                  "python .sage/_tools/record_worker_usage.py"),
     ("python _tools/discover_and_record.py",                  "python .sage/_tools/discover_and_record.py"),
     ("python _tools/list_eligible.py",                        "python .sage/_tools/list_eligible.py"),
+    ("python _tools/rollup_status.py",                        "python .sage/_tools/rollup_status.py"),
     ("`HANDBOOK.md`",                                         "`.sage/HANDBOOK.md`"),
     ("`sage-config.SCHEMA.md`",                               "`.sage/sage-config.SCHEMA.md`"),
     ("`guides/",                                              "`.sage/guides/"),
@@ -110,18 +121,22 @@ SKILL_PATH_REWRITES = [
     ("`agents/tester.md`",                                    "`.sage/agents/tester.md`"),
     ("`agents/product-owner.md`",                             "`.sage/agents/product-owner.md`"),
     ("`agents/test-creator.md`",                              "`.sage/agents/test-creator.md`"),
+    ("`agents/epic-verifier.md`",                             "`.sage/agents/epic-verifier.md`"),
     ("`_tools/load_agents.py`",                               "`.sage/_tools/load_agents.py`"),
     ("`_tools/update_story_status.py`",                       "`.sage/_tools/update_story_status.py`"),
+    ("`_tools/update_epic_status.py`",                        "`.sage/_tools/update_epic_status.py`"),
     ("`_tools/verify_ac_map.py`",                             "`.sage/_tools/verify_ac_map.py`"),
+    ("`_tools/verify_epic.py`",                               "`.sage/_tools/verify_epic.py`"),
     ("`_tools/extract_token_usage.py`",                       "`.sage/_tools/extract_token_usage.py`"),
     ("`_tools/record_worker_usage.py`",                       "`.sage/_tools/record_worker_usage.py`"),
     ("`_tools/discover_and_record.py`",                       "`.sage/_tools/discover_and_record.py`"),
     ("`_tools/list_eligible.py`",                             "`.sage/_tools/list_eligible.py`"),
+    ("`_tools/rollup_status.py`",                             "`.sage/_tools/rollup_status.py`"),
     ("`examples/chatbot/.sage/sage-tester-config.yaml`",      "`.sage/sage-tester-config.yaml`"),
     ("`examples/chatbot/.sage/`",                             "`.sage/`"),
 ]
 
-AGENT_SLUGS = ["product-owner", "test-creator", "developer", "tester"]
+AGENT_SLUGS = ["product-owner", "test-creator", "developer", "tester", "epic-verifier"]
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +211,8 @@ team:
         file: "agents/developer.md"
       - name: "Tester"
         file: "agents/tester.md"
+      - name: "EpicVerifier"
+        file: "agents/epic-verifier.md"
     dev_test_only:
       - name: "Developer"
         file: "agents/developer.md"

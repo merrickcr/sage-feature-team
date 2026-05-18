@@ -22,6 +22,8 @@ team:
         file: "agents/developer.md"
       - name: "Tester"
         file: "agents/tester.md"
+      - name: "EpicVerifier"
+        file: "agents/epic-verifier.md"
     dev_test_only:
       - name: "Developer"
         file: "agents/developer.md"

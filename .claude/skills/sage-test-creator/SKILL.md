@@ -45,7 +45,7 @@ From the JSON, extract `agents.TestCreator`. The rendered prompt has two kinds o
 - `agents/test-creator.md` § Key Rules
 
 **Ignore these sections** (team-mode workflow that does not apply when invoked as a skill):
-- `_BASE.md` § STOP / SILENCE RULE / ACK FIRST / Workflow / Completion Handshake / Escalation Pattern / Progress File Updates / Key Rules (All Agents)
+- `_BASE.md` § STOP / SILENCE RULE / Starting Message / Workflow / Completion Outcomes / Progress File Updates / Key Rules (All Agents)
 - `test-creator.md` § TestCreator Workflow (After Receiving Task) -- this skill defines its own workflow below
 - `test-creator.md` § Completion Message Format -- this skill reports to the user as plain text instead
 

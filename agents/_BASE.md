@@ -1,6 +1,6 @@
 # Agent Base Instructions
 
-**Shared boilerplate for all agents (ProductOwner, TestCreator, Developer, Tester).**
+**Shared boilerplate for all agents (ProductOwner, TestCreator, Developer, Tester, EpicVerifier).**
 
 All agents follow these patterns. Role-specific instructions appear in each agent file.
 
@@ -20,6 +20,7 @@ All agents follow these patterns. Role-specific instructions appear in each agen
 - Being spawned into a team
 - Having feature context in your prompt
 - Auto-routing based on context
+- **Entries you see in the shared team task list** (TaskList / TaskGet output, task panel items). The task list is the orchestrator's own planning surface -- it is NOT an assignment channel. Even if an entry mentions your role, your phase, or the current feature, it is NOT your task unless it arrives via SendMessage. Do not read task list entries to decide what to do, do not refuse work because the task list has unfamiliar entries, and do not push back on the orchestrator over task list contents. Treat the shared task list as informational background only.
 
 **On spawn:** wait silently. Do not read files. Do not acknowledge anything. Output nothing. Just wait until the first SendMessage arrives.
 
@@ -47,38 +48,33 @@ When a situation in your workflow matches one of these instructions, **read the 
 
 **Be silent. No narration. No commentary. No thoughts about your work.**
 
-You output ONLY:
-- ACK message (within 60 seconds of receiving task)
-- Completion report (when work is done)
+You output exactly two SendMessages per task:
+1. A single "starting" message within 60s of task receipt
+2. A single completion message when work is done
 
 Do NOT output:
 - [X] Thoughts or reasoning
 - [X] Status updates (unless user explicitly asks "what's the status?")
 - [X] Commentary about what you're doing
 - [X] Explanations of your work
+- [X] Multiple completion messages or retransmissions
 
-**Between task and completion: Silent work.**
+**Between starting and completion: silent work.**
 
 ---
 
-## **CRITICAL:** ACK FIRST -- BEFORE ANY WORK
+## **CRITICAL:** Send "Starting" Message Within 60s
 
-**When you receive a SendMessage task, you MUST send acknowledgment IMMEDIATELY (within 60 seconds). Do NOT start work until ACK is sent.**
-
-**Send this exact ACK via SendMessage** (this format works for every role -- no role-specific variant needed):
+When you receive a task, send one brief message within 60 seconds so the orchestrator knows you have it and are starting:
 
 ```python
 SendMessage(
   to="User",
-  summary=f"{AGENT_NAME} ACK: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Acknowledged. Starting work now.
-
---- STATUS: ACKNOWLEDGED | READY: no | BLOCKER: none""")
+  summary=f"{AGENT_NAME}: starting <STORY-N or task-id>",
+  message="@User: [Feature: <feature_name>] Starting on <STORY-N or task-id>.")
 ```
 
-Then and ONLY THEN proceed to work.
-
-**Why:** Team Lead is waiting for confirmation that you received the task. Starting work without ACKing causes timeouts and protocol violations.
+Then begin work. No further protocol -- no retransmissions, no SYN/ACK, no message IDs. The single completion message at the end is the orchestrator's signal that you're done.
 
 ---
 
@@ -86,117 +82,72 @@ Then and ONLY THEN proceed to work.
 
 **Always follow this sequence:**
 
-1. **Send ACK** within 60 seconds
-   - Reference: [HANDBOOK: ACK Protocol](../HANDBOOK.md#ack-protocol-all-agents)
-   - Format: `@User: [Feature: {feature_name}] Acknowledged. Starting work now.`
-   - Send via SendMessage tool
-
-2. **Update progress file** (IF path was provided in task message)
-   - Mark your section as IN_PROGRESS
-   - Reference: [HANDBOOK: Progress File Updates](../HANDBOOK.md#progress-file-updates-mandatory---all-agents)
-
-3. **Do work**
-   - Follow role-specific instructions (in your agent file)
-   - Read spec and test files as needed
-   - Implement, test, or create as directed
-
-4. **Update progress file** (IF path was provided in task message)
-   - Mark your section as DONE or FAILED
-   - Include relevant details (files changed, test count, etc.)
-
-5. **Complete the 3-way handshake** (see section below)
-   - Send [SYN], wait for SYN-ACK, send [ACK]+DATA, wait for routing
-   - Reference: [HANDBOOK: Message Delivery Handshake Protocol](../HANDBOOK.md#message-delivery-handshake-protocol-true-3-way-syn--syn-ack--ack)
+1. **Send "starting" message** within 60s (see above)
+2. **Update progress file** if a path was provided in the task message (mark your section IN_PROGRESS)
+3. **Do work** per your role-specific instructions
+4. **Update progress file** with results (DONE or FAILED, files changed, etc.)
+5. **Flip story status** via `update_story_status.py` -- the YAML is the source of truth (see Completion Outcomes below)
+6. **Send completion message** -- exactly one SendMessage with your outcome and payload (role file has the template)
+7. **Accept `shutdown_request`** from the orchestrator and terminate
 
 ---
 
-## Completion Handshake Workflow (All Agents)
+## Completion Outcomes (Three Cases)
 
-**MANDATORY: Follow this sequence after completing your work (Step 5 above).**
+Every task ends in one of three outcomes. The mechanics are the same in all three:
 
-### Step 5a: Send [SYN] Signal
-- Generate `message_id = f"{agent_short}-{phase}-{feature_short}-{int(time.time())}"`
-- Send via SendMessage with [SYN] marker (signal only, no work data yet)
-- Role-specific format: See your agent file for exact message template
+1. Flip the story YAML status via `update_story_status.py` -- the locked helper is the source of truth; the orchestrator re-reads the YAML after every completion.
+2. Send ONE completion `SendMessage` to User with the outcome and the payload your role file specifies.
+3. When the orchestrator sends `shutdown_request`, respond `shutdown_response approve=true` and terminate.
 
-### Step 5b: Wait for SYN-ACK
-- Wait 5s for Team Lead's SYN-ACK with matching message_id
-- If no SYN-ACK: retry [SYN] up to 3 times total (15s max)
-- After receiving SYN-ACK: proceed to Step 5c
-
-### Step 5c: Send [ACK] + Full Data
-- Send full completion report with [ACK] marker and matching message_id
-- Include all work details (use message template from your agent file)
-- Wait 10s for Team Lead to route to next agent
-- If no routing: retry [ACK]+DATA up to 2 times total (20s max)
-
-### Step 5d: Go IDLE
-- When Team Lead routes to next agent (routing message echoes your message_id)
-- Both sides confirmed message delivery and processing
-- Go IDLE (stop responding to this task)
-
----
-
-## Completion Outcomes (Three Cases, Same Handshake)
-
-**THE HANDSHAKE ALWAYS FIRES. Status varies; protocol does not.**
-
-Every task you receive has exactly three possible outcomes. In ALL THREE, you MUST complete the 3-way SYN/SYN-ACK/ACK handshake described above. The Team Lead is blind without it -- if you skip the handshake, the entire workflow deadlocks waiting on you.
+No handshake. No retransmissions. No message-ID dedup. The story YAML is the event log; the completion message carries the human-readable detail; `shutdown_request` ends the conversation.
 
 ### Outcome 1: DONE (success)
 
 - All gates passed (tests green, AC map verified, work satisfies the role contract)
-- Story status advances to its next state (`DONE`, `IN_DEV`, etc.) via `update_story_status.py`
-- Handshake `[ACK]` payload reports the success details
+- `update_story_status.py STORY-N <next-state>` (e.g., `DONE`, `IN_DEV`, `TESTING` -- whichever is correct for your role)
+- Completion message includes the success details (see your role file for the exact payload)
 
-### Outcome 2: FAILED (recoverable -- e.g., tests failed, gate failed, code didn't compile, build broke)
+### Outcome 2: FAILED (recoverable -- the next cycle handles it)
 
-- These are NOT escalations. They are normal "this cycle didn't work" outcomes the orchestrator handles by re-cycling.
-- Recoverable failure category includes:
-  - **Tester:** any test failure -- assertion fail, runtime error, build/compile failure, dex error, missing dependency, environment-not-ready (transient). Build failures are NOT escalations; they're Gate A failures.
-  - **Developer:** code change broke a previously-passing test (caught by Tester in next cycle); compile fails (Tester re-cycles)
-  - **TestCreator:** test couldn't be written because spec is genuinely ambiguous (rare -- prefer Outcome 3 if truly stuck)
-  - **All:** anything the next worker in the loop can plausibly fix on a re-cycle
-- Flip the story status to the appropriate previous state (e.g., Tester flips `TESTING` -> `IN_DEV`) via `update_story_status.py` with `--reason "<one-line summary>"`
-- Handshake `[ACK]` payload includes the failure details -- the next worker will read them and act
+These are **not** escalations. They're normal "this cycle didn't work" outcomes the orchestrator handles by re-cycling:
+
+- **Tester:** any test failure -- assertion fail, runtime error, build/compile failure, dex error, missing dependency, transient environment-not-ready. Build failures are NOT escalations.
+- **Developer:** code change broke a previously-passing test; compile fails (Tester re-cycles).
+- **TestCreator:** test genuinely couldn't be written because spec is ambiguous (rare -- prefer Outcome 3 only if truly stuck).
+- **All:** anything the next worker in the loop can plausibly fix on a re-cycle.
+
+Steps:
+- `update_story_status.py STORY-N <previous-state> --reason "<one-line summary>"` (e.g., Tester flips `TESTING` -> `IN_DEV`)
+- Completion message includes the failure details (failing test list, build error excerpt, verifier JSON) so the next worker can act on them.
 
 ### Outcome 3: BLOCKED (truly unrecoverable without User intervention)
 
 Reserved for situations where re-cycling cannot help and the user MUST decide:
 
 - Project instructions are missing or contradictory (e.g., test framework not configured, tagging convention undefined)
-- Infrastructure totally unreachable (e.g., no emulator at all when one is required, network down, credentials missing)
+- Infrastructure totally unreachable (no emulator at all when required; network down; credentials missing)
 - Spec/AC contradiction that requires a spec amendment
 - Test data file missing and you don't know what it should contain
 
-For ALL OTHER failures (anything fixable by another cycle), use Outcome 2.
+For all other failures (anything fixable by another cycle), use Outcome 2.
 
-**When you hit a genuine BLOCKER:**
-
-1. Flip the story status to `BLOCKED` via the helper script with a reason:
-   ```bash
-   python {SAGE_TOOLS_DIR}/update_story_status.py STORY-N BLOCKED \
-       --stories-dir _output/<feature_name>/stories \
-       --reason "<one-line description; user will see this>"
-   ```
-2. **Complete the handshake** (SYN/SYN-ACK/ACK) -- same as success/failure -- with `[ACK]` payload describing the blocker:
+Steps:
+1. `update_story_status.py STORY-N BLOCKED --reason "<one-line; user will see this>"`
+2. Send completion message with the blocker payload:
    ```
    @User: [Feature: <name>] BLOCKED on STORY-N
 
-   [ACK] <message_id>
-
-   STATUS: BLOCKED | READY: yes | BLOCKER: <category>
+   STATUS: BLOCKED | BLOCKER: <category>
 
    Why: <one-paragraph explanation>
    What user must decide: <specific question>
-   Current state: <files/configs/etc. that are relevant>
+   Current state: <relevant files/configs/etc.>
    Recommended user action: <if applicable>
    ```
-3. **Go IDLE after the handshake completes.** Do NOT just sit there waiting for SendMessage. The Team Lead now has the blocker info, has the story marked BLOCKED in the file, and will surface it to the User and continue scheduling other stories.
+3. Accept the orchestrator's `shutdown_request` when it arrives.
 
-**Critical rule:** if you find yourself wanting to "wait for user input without completing the handshake," that's wrong. The handshake IS how you notify both the Team Lead and the User. Skipping it = silent deadlock.
-
-Reference: [HANDBOOK: Stop on Questions - Escalate Pattern](../HANDBOOK.md#stop-on-questions---escalate-pattern-all-agents)
+The orchestrator reads the BLOCKED status from the YAML, surfaces the message to the User, and continues scheduling other stories.
 
 ---
 
@@ -228,29 +179,24 @@ Reference: [HANDBOOK: Progress File Updates](../HANDBOOK.md#progress-file-update
 ## Key Rules (All Agents)
 
 **DO:**
-- [OK] Send ACK immediately when you receive a task
-- [OK] Update progress file if path is provided
-- [OK] Reference HANDBOOK for protocol details (handshake, timeouts, escalation)
-- [OK] Escalate any questions to User
-- [OK] Follow 3-way handshake: [SYN] -> [SYN-ACK] -> [ACK]+DATA -> Routing
-- [OK] Maintain silence between ACK and routing message
-- [OK] Retry according to HANDBOOK timeouts (5s SYN x 3, 10s ACK+DATA x 2)
+- [OK] Send a single "starting" message within 60s
+- [OK] Update progress file if a path is provided
+- [OK] Flip story YAML status via `update_story_status.py` before sending completion message
+- [OK] Send exactly one completion message, then accept `shutdown_request`
+- [OK] Escalate genuine BLOCKERs (Outcome 3) clearly, with the specific user decision the orchestrator needs to surface
 
 **DON'T:**
-- [X] Start work without receiving explicit SendMessage task
+- [X] Start work without an explicit SendMessage task
 - [X] Assume feature name or context
 - [X] Skip progress file updates
-- [X] Make technical decisions (escalate questions instead)
-- [X] Output status updates or commentary (unless queried)
-- [X] Include work data in [SYN] message (SYN signals readiness only)
-- [X] Give up after first timeout (follow HANDBOOK retry limits)
-- [X] **Skip the handshake when you hit a blocker** -- the handshake is how you tell the Team Lead AND the User. No handshake = silent deadlock. See "Completion Outcomes" above. Always complete SYN/SYN-ACK/ACK even when reporting BLOCKED.
-- [X] Treat build/compile failures as escalations -- those are recoverable (Outcome 2). Only true infrastructure or spec-ambiguity problems are BLOCKED (Outcome 3).
+- [X] Output status updates or running commentary
+- [X] Send multiple completion messages or retry the send -- one is enough; the orchestrator reconciles via the YAML
+- [X] Treat build/compile failures as BLOCKED -- those are Outcome 2 (recoverable)
 
 ---
 
 ## References
 
-- **Protocol details:** [../HANDBOOK.md](../HANDBOOK.md)
+- **Protocol & timeouts:** [../HANDBOOK.md](../HANDBOOK.md)
 - **Message format:** [../templates/MESSAGE_TEMPLATE.md](../templates/MESSAGE_TEMPLATE.md)
 - **Stack profile:** Your project loads a profile from `profiles/` (defines test framework, server, language)

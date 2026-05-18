@@ -46,7 +46,7 @@ From the JSON, extract `agents.Tester`. The rendered prompt has two kinds of con
 - `agents/tester.md` § Key Rules -- monitoring, story-status gating, boundaries
 
 **Ignore these sections** (team-mode workflow that does not apply when invoked as a skill):
-- `_BASE.md` § STOP / SILENCE RULE / ACK FIRST / Workflow / Completion Handshake / Escalation Pattern / Progress File Updates / Key Rules (All Agents)
+- `_BASE.md` § STOP / SILENCE RULE / Starting Message / Workflow / Completion Outcomes / Progress File Updates / Key Rules (All Agents)
 - `tester.md` § Tester Workflow (After Receiving Task) -- this skill defines its own workflow below (the two-gate logic is inlined in Step 6)
 - `tester.md` § Async Polling Pattern (Universal) -- inline `Monitor` or wait synchronously instead of `ScheduleWakeup`
 - `tester.md` § Completion Message Format -- this skill reports to the user as plain text instead

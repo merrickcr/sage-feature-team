@@ -45,7 +45,7 @@ From the JSON, extract `agents.Developer`. The rendered prompt has two kinds of 
 - `agents/developer.md` § Key Rules
 
 **Ignore these sections** (team-mode workflow that does not apply when invoked as a skill):
-- `_BASE.md` § STOP / SILENCE RULE / ACK FIRST / Workflow / Completion Handshake / Escalation Pattern / Progress File Updates / Key Rules (All Agents)
+- `_BASE.md` § STOP / SILENCE RULE / Starting Message / Workflow / Completion Outcomes / Progress File Updates / Key Rules (All Agents)
 - `developer.md` § Developer Workflow (After Receiving Task) -- this skill defines its own workflow below
 - `developer.md` § Completion Message Format -- this skill reports to the user as plain text instead
 

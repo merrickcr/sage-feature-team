@@ -8,192 +8,65 @@ This document is referenced by all 4 agents (ProductOwner, TestCreator, Develope
 
 ## Table of Contents
 
-1. [Message Delivery Handshake Protocol](#message-delivery-handshake-protocol-three-way-syn-syn-ack-ack)
-2. [ACK Protocol](#ack-protocol-all-agents)
-3. [Stop on Questions - Escalate Pattern](#stop-on-questions---escalate-pattern-all-agents)
-4. [SendMessage Format Standard](#sendmessage-format-standard-all-team-communications)
-5. [Unified Reporting Patterns](#unified-reporting-patterns-all-agents)
-6. [Feature Context Rules](#feature-context-rules)
-7. [Unified Timeout & Escalation](#unified-timeout--escalation-reference-table)
-8. [Workflow Routing](#workflow-routing-orchestrator-decision-tree)
-9. [Monitor Tool](#monitor-tool-for-long-running-tasks-tester--others)
-10. [Progress File Updates](#progress-file-updates-mandatory---all-agents)
-11. [Timestamp Logging](#timestamp-logging-all-agents---team-mode)
-12. [Roles Overview](#feature-development-workflow-roles-at-a-glance)
-13. [Team vs Solo Mode](#team-mode-vs-solo-mode)
-14. [Quick Start Checklist](#before-you-start-work-checklist)
-15. [Protocol Summary](#summary-the-protocol-in-one-page)
+1. [Completion Reporting Model](#completion-reporting-model)
+2. [Stop on Questions - Escalate Pattern](#stop-on-questions---escalate-pattern-all-agents)
+3. [SendMessage Format Standard](#sendmessage-format-standard-all-team-communications)
+4. [Unified Reporting Patterns](#unified-reporting-patterns-all-agents)
+5. [Feature Context Rules](#feature-context-rules)
+6. [Unified Timeout & Escalation](#unified-timeout--escalation-reference-table)
+7. [Workflow Routing](#workflow-routing-orchestrator-decision-tree)
+8. [Monitor Tool](#monitor-tool-for-long-running-tasks-tester--others)
+9. [Progress File Updates](#progress-file-updates-mandatory---all-agents)
+10. [Timestamp Logging](#timestamp-logging-all-agents---team-mode)
+11. [Roles Overview](#feature-development-workflow-roles-at-a-glance)
+12. [Team vs Solo Mode](#team-mode-vs-solo-mode)
+13. [Quick Start Checklist](#before-you-start-work-checklist)
+14. [Protocol Summary](#summary-the-protocol-in-one-page)
 
 ---
 
-## Message Delivery Handshake Protocol (True 3-Way: SYN -> SYN-ACK -> ACK)
+## Completion Reporting Model
 
-**Purpose:** Guarantee communication between agents and Team Lead using a true TCP-style 3-way handshake.
+**The story YAML is the event log.** The orchestrator reconciles by re-reading it after every worker completion. Communication is two messages, both via `SendMessage`:
 
-**[!] Detailed Implementation:** See [_BASE.md](_BASE.md#message-id-generation--handshake-retry-logic) for complete pseudocode, retry logic, and message ID generation.
+1. **"Starting" message** -- within 60s of task receipt. Confirms the worker is alive and has the task.
+2. **Completion message** -- exactly one, when the worker is done. Carries the outcome payload (DONE / FAILED / BLOCKED) for human-readable detail.
 
-### Quick Summary
+Between them the worker is silent. After the completion message, the worker accepts the orchestrator's `shutdown_request` and terminates.
 
-```
-Agent (work done)
-  v [SYN] Signal intent to report (no data yet)
-  <- [SYN-ACK] Team Lead confirms listening (1s)
-  v [ACK] + full work data (send all results)
-  <- [ROUTING] Team Lead routes to next agent (implicit final ACK)
-  v Go IDLE (guaranteed delivery)
-```
+There is **no SYN/SYN-ACK/ACK three-way handshake**, no message-ID dedup, no retransmission machinery. State authority lives in the YAML (locked, atomic) via `update_story_status.py`. The completion message is for visibility, not for transport reliability.
 
-### Timeouts (Optimized for Responsiveness)
-
-| Phase | Timeout | Retries | Total | Purpose |
-|-------|---------|---------|-------|---------|
-| **SYN** | 5s | 3x | 15s | Agent signals ready (no data) |
-| **SYN-ACK** | 1s (TL response) | N/A | 1s | Team Lead acknowledges |
-| **ACK+DATA** | 10s | 2x | 20s | Agent sends full results |
-| **ROUTING** | 5s (detect via polling) | -- | 5s | Agent confirms routing received |
-| **Total** | -- | -- | **41s** | Full handshake guaranteed |
-
-**Why short timeouts:** If Team Lead is listening (as required), 5-10s is more than enough for network + processing. Longer waits mask bugs and waste agent latency.
-
-### Team Lead Deduplication (Critical)
-
-Team Lead **MUST** track all message IDs and detect retransmissions:
-
-```python
-processed_message_ids = set()  # Persistent registry
-pending_message_ids = set()    # Waiting for ACK+DATA
-
-def handle_syn(message_id):
-    if message_id in processed_message_ids:
-        return "DUPLICATE: resend SYN-ACK (already processed)"
-    if message_id in pending_message_ids:
-        return "RETRY: resend SYN-ACK (waiting for ACK)"
-    pending_message_ids.add(message_id)
-    return "NEW: send SYN-ACK"
-
-def handle_ack_data(message_id):
-    if message_id in processed_message_ids:
-        return "DUPLICATE: resend routing (already processed)"
-    if message_id not in pending_message_ids:
-        return "ERROR: unknown message_id"
-    pending_message_ids.remove(message_id)
-    processed_message_ids.add(message_id)
-    return "NEW: process and route to next agent"
-```
-
----
-
-### Complete Handshake State Machine
+### Worker Side
 
 ```
-AGENT SIDE:
-+--------------+
-| Work Complete|
-\------+-------+
-       | Generate message_id
-       v
-+----------------------+
-| Send [SYN]           |----------------+
-| (signal only)        |                |
-\------+---------------+                |
-       | Wait 5s                        |
-       v                                v
-    [SYN-ACK received   [SYN-ACK NOT received]
-     with matching ID]       v
-       |                 Resend [SYN]
-       |                 (max 3x, 15s total)
-       v                      |
-+----------------------+      |
-| Send [ACK] + DATA    |<-----+
-| (full completion)    |
-\------+---------------+
-       | Wait 10s for routing
-       | to next agent
-       v
-    [Routing to next    [NO routing message]
-     agent received]        v
-       |              Resend [ACK]+DATA
-       |              (max 2x, 20s total)
-       |                   |
-       \-----------+-------+
-                   v
-            +--------------+
-            | Go IDLE      |
-            | (confirmed)  |
-            \--------------+
-
-TEAM LEAD SIDE:
-+------------------+
-| Receive [SYN]    |
-| from agent       |
-\------+-----------+
-       | Check: in processed or pending?
-       v
-+----------------------+
-| Add to pending_ids   |
-| Send [SYN-ACK]       | (within 1s)
-| echo message_id      |
-\------+---------------+
-       | Wait for [ACK]+DATA
-       v
-    [ACK+DATA received  [No ACK+DATA]
-     with matching ID]       v
-       |              Wait, agent will retry
-       |              or escalate
-       v
-+----------------------+
-| Move to processed    |
-| Process completion   |
-| Update progress      |
-\------+---------------+
-       |
-       v
-+----------------------+
-| Route to next agent  | (within 1s)
-| Include message_id   | <- Final ACK (implicit)
-\----------------------+
+Receive SendMessage task
+  v Send "Starting on STORY-N" within 60s (one message, no retry)
+  v Do work (silently)
+  v Flip story status via update_story_status.py (atomic + locked)
+  v Send completion message (one message, payload per role file)
+  v Accept shutdown_request -> approve=true -> terminate
 ```
 
-### Glossary
+### Orchestrator Side
 
-| Term | Meaning |
-|------|---------|
-| **SYN** | Agent signals work completion and readiness to report (synchronize) |
-| **SYN-ACK** | Team Lead acknowledges receipt and readiness to accept details |
-| **ACK** | Agent confirms Team Lead's readiness and sends full details |
-| **Message ID** | Unique identifier for this completion communication (prevents duplicate processing) |
-| **Deduplication** | Tracking received IDs to ignore retransmitted messages |
-| **Handshake Complete** | Both sides confirmed successful message delivery and processing |
-| **Implicit ACK** | Team Lead's routing to next agent signals completion of handshake |
-
----
-
-## ACK Protocol (All Agents)
-
-When you receive a work request, send acknowledgment within 60 seconds using **graduated timeout**:
-
-### Timeline
-- **0-30 seconds:** Normal response time (expected)
-- **30-45 seconds:** Late but acceptable (network delay, processing)
-- **45-60 seconds:** Very late (congestion), but still acceptable
-- **60+ seconds:** Too late, request new directive
-
-### ACK Format (Team Mode - MUST Use SendMessage)
 ```
-@User: [Feature: feature_name] Acknowledged. Starting [work] now.
+Spawn worker, send task
+  v If "Starting" message doesn't arrive within 60s: assume dead, mark its story BLOCKED with reason=ack_timeout, send shutdown_request, continue scheduling
+  v Otherwise wait for completion message
+  v On completion: re-read story YAML (the source of truth), route based on new status
+  v Send shutdown_request, confirm shutdown_response approve=true
 ```
 
-**CRITICAL: Send ACK via SendMessage tool.** Do NOT just print it in text output.
+### Starting Message Format
 
-Or if working independently (solo mode):
+**Team mode:**
 ```
-I acknowledge. Starting work now.
+@User: [Feature: feature_name] Starting on STORY-N (or task-id).
 ```
 
-### Critical Rule
-**Do NOT begin work before sending ACK.** User (skill/team lead) is waiting for confirmation that you received the message.
+**Solo mode:** plain text reply is fine; no SendMessage needed.
 
-**In team mode:** ACK MUST be sent via SendMessage to ensure the User receives it reliably.
+Do NOT begin substantive work before sending this. It costs ~one second and tells the orchestrator the worker is alive.
 
 ---
 
@@ -259,7 +132,7 @@ Please advise how to proceed.
 - For task assignments: include `[Task: id]` for sequencing
 - For cycle work: include `[Cycle: n/m]` context
 
-**Examples:** See `templates/MESSAGE_TEMPLATE.md` for all message types (ACK, completion, work rejection, cycle summary, etc.)
+**Examples:** See `templates/MESSAGE_TEMPLATE.md` for all message types (starting, completion, escalation, cycle summary, etc.)
 
 ---
 
@@ -320,7 +193,7 @@ Previous cycle failures:
 - [RULE] Include JSON object for EVERY test run (even if all pass, use empty failures array)
 - [RULE] Use exact field names (test, expected, actual, error)
 - [RULE] `error` can be multi-word string
-- [RULE] Include in completion message ACK+DATA section
+- [RULE] Include in the completion message payload
 - [RULE] If actual/expected unknown, use null: `"expected": null, "actual": null`
 
 ---
@@ -360,35 +233,19 @@ This confirms you worked on the correct feature.
 
 ## Unified Timeout & Escalation Reference Table
 
-**Single source of truth for all timeout rules (optimized for TCP handshake)**
+**Single source of truth for all timeout rules**
 
-| Scenario | Event | Timeout | Action | Escalate At |
-|----------|-------|---------|--------|------------|
-| **Handshake SYN** | Agent signals completion | 5s | Wait for SYN-ACK | 15s (3 retries) |
-| **Handshake SYN-ACK** | Team Lead responds | 1s | Immediate response | -- (built-in) |
-| **Handshake ACK+DATA** | Agent sends full results | 10s | Wait for DONE | 20s (2 retries) |
-| **Handshake DONE** | Team Lead confirms | 1s | Immediate response | -- (built-in) |
-| **Agent Work** | Agent should report progress | 5 min | Ask for status | 8 min escalate |
-| **Test Output** | Tester monitoring tests | 30s no output | No progress detected | Immediate hang report |
-| | | 15 min absolute | Hard timeout | Kill & report |
-| **Spec Review** | ProductOwner awaits user feedback | 5 min | Ask for status | Escalate |
-| **Same Test Fails** | Developer fixes, re-run fails same test | Cycle N | Initial fix attempt | Continue |
-| | | Cycle N+1 | 2nd fix attempt | Escalate after 2nd fail |
-| **Workflow Duration** | Entire feature development | 25 min | Warn user | 30 min escalate |
+| Scenario | Event | Timeout | Action |
+|----------|-------|---------|--------|
+| **Starting Message** | Worker confirms task received | 60s | If absent: mark story BLOCKED (reason=ack_timeout), send shutdown_request, continue scheduling |
+| **Agent Work** | Worker should report completion | 5 min soft | Ask for status; escalate at 8 min |
+| **Test Output** | Tester monitoring tests | 30s no output | Immediate hang report |
+| | | 15 min absolute | Hard timeout -- kill & report |
+| **Spec Review** | ProductOwner awaits user feedback | 5 min | Ask for status; escalate after |
+| **Same Test Fails** | Developer fixes, re-run fails same test | Cycle N+1 | 2nd fix attempt -- escalate after 2nd fail |
+| **Workflow Duration** | Entire feature development | 25 min warn | Escalate at 30 min |
 
-### Interpretation Rules
-- **Soft Timeout:** When to start asking for status
-- **Escalate At:** When to stop waiting and escalate
-- **Action:** What to do at soft timeout point
-
-### Escalation Example
-```
-Timeline:
-T=0s:    Send directive to agent via User (skill)
-T=30s:   No ACK - send gentle check: "@Agent: Did you receive my message?"
-T=45s:   Still no ACK - send reminder: "@Agent: Please ACK when ready"
-T=60s:   Still no ACK - ESCALATE: "@Agent: You must send ACK within 60s. Are you responsive?"
-```
+The orchestrator does **not** retry the starting-message check or send graduated nudges. The 60-second window is a single deadline. If it's missed, the worker is treated as dead -- mark its story BLOCKED with `ack_timeout`, shut it down, and continue. No graduated 30s/45s/60s probing.
 
 ---
 
@@ -495,9 +352,9 @@ Status: Blocked, awaiting user guidance
 - Uncertainty about what to test
 
 **Skill (Team Lead):**
-- Agent doesn't ACK within 60s
-- Agent doesn't report within 8 minutes
-- Workflow running >30 minutes
+- Worker doesn't send a Starting message within 60s of task receipt -> mark story BLOCKED (reason=ack_timeout), shutdown_request, continue scheduling other stories
+- Worker doesn't send a completion message within the work-timeout window (8 min default) -> treat as deadlocked, shutdown_request, mark story BLOCKED with reason=work_timeout
+- Workflow running >30 minutes -> warn user
 - Multiple test hang attempts unsuccessful
 
 ---
@@ -509,16 +366,18 @@ Status: Blocked, awaiting user guidance
 
 **All reports use the unified template** (see `templates/MESSAGE_TEMPLATE.md`):
 
-Three report types:
+Two report types (one of each per task):
 
-1. **ACKNOWLEDGMENT** -> `STATUS: ACKNOWLEDGED | READY: no` (send within 60s)
-2. **COMPLETION** -> `STATUS: COMPLETE | READY: yes` (send when work done)
-3. **ESCALATION** -> `STATUS: ESCALATION | READY: no | BLOCKER: reason` (send when blocked)
+1. **STARTING** -> `@User: [Feature: name] Starting on STORY-N (or task-id).` (send within 60s)
+2. **COMPLETION** -> one of:
+   - `STATUS: DONE | READY: yes` -- success
+   - `STATUS: FAILED | READY: no` -- recoverable; next worker re-cycles
+   - `STATUS: BLOCKED | READY: no | BLOCKER: reason` -- user must decide
 
 **Key rules:**
-- Always include `@User:`, `[Feature: name]`, and STATUS/READY/BLOCKER fields
+- Always include `@User:`, `[Feature: name]`, and STATUS/READY/BLOCKER fields on completion
 - Use SendMessage tool, never text output alone
-- For work rejection: use `STATUS: ESCALATION | BLOCKER: reason`
+- Flip the story YAML status via `update_story_status.py` **before** sending the completion message -- the YAML is the orchestrator's source of truth
 - List artifacts clearly (files changed, tests created, etc.)
 - **Tester ONLY:** Include TEST_FAILURE lines for all failures (see "Test Failure Reporting Format" section)
 
@@ -689,7 +548,7 @@ Print timestamps to console at 5 key milestones:
 | **TestCreator** | Spec file + progress file | `tests/test_*.py` with tests | Unclear test requirements |
 | **Developer** | Spec + test file | Modified implementation files | Same test fails 2x |
 | **Tester** | Test command from Skill | Test results report | Test hangs (30s+ no output) |
-| **Skill (Team Lead)** | User requirements or work request | Routes agents, tracks progress | Agent ACK timeout, workflow timeout |
+| **Skill (Team Lead)** | User requirements or work request | Routes agents, tracks progress | Starting-message timeout, workflow timeout |
 
 ---
 
@@ -907,30 +766,31 @@ def update_progress_file_safely(feature_name, section_name, new_content):
 
 - [ ] Feature name extracted? (snake_case)
 - [ ] Task understood?
-- [ ] Ready to send ACK via SendMessage?
-- [ ] Know: 60s ACK timeout, 8min work timeout, escalate on questions?
+- [ ] Ready to send "Starting on STORY-N" SendMessage within 60s?
+- [ ] Know: 60s starting-message deadline, 8 min work timeout, escalate on real BLOCKERs?
 
 ---
 
 ## Summary: The Protocol in One Page
 
 ```
-RECEIVE WORK
+RECEIVE WORK (SendMessage task)
 v
-Send ACK within 60s (via SendMessage if team)
+Send "Starting on STORY-N" within 60s (one SendMessage, no retry)
 v
-BEGIN WORK
+BEGIN WORK (silent)
 v
-Work proceeds normally, or...
-v [Question?] -> ESCALATE IMMEDIATELY
-v [Stuck?] -> ESCALATE IMMEDIATELY
-v [Hang?] -> ESCALATE IMMEDIATELY
+On question/ambiguity/hang/unrecoverable infra issue -> follow Outcome 3 (BLOCKED):
+  v update_story_status.py STORY-N BLOCKED --reason "..."
+  v send completion message with BLOCKER payload
 v
 COMPLETE WORK
 v
-Send completion report (via SendMessage if team)
+update_story_status.py STORY-N <next-status>
 v
-DONE
+Send ONE completion message (SendMessage) with the outcome payload
+v
+Accept shutdown_request -> approve=true -> DONE
 ```
 
 This handbook is referenced by all agents. See your agent-specific file for detailed instructions on your particular role.
