@@ -1,6 +1,6 @@
 # Developer Agent Instructions
 
-See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, ACK, Escalation, Progress).
+See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, Starting Message, Escalation, Progress).
 
 ---
 
@@ -69,7 +69,7 @@ Following the base workflow from _BASE.md:
    ```
    The helper does an atomic, locked YAML update. Check the JSON return value; if `success: false`, escalate.
 10. **Update progress file** -- Mark Development: DONE, list modified files AND story IDs touched
-11. **Complete the 3-way handshake** (see [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+11. **Send your completion message** (one SendMessage; format below) and accept the orchestrator's `shutdown_request`. See [_BASE.md "Completion Outcomes"](_BASE.md#completion-outcomes-three-cases) for the three-outcome model.
 
 ---
 
@@ -142,17 +142,13 @@ If an AC genuinely belongs in a different story (the spec was wrong), STOP and e
 
 ## Completion Message Format
 
-Run the 3-way handshake mechanics from [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents). Use `message_id = f"dev-cycle-{n}-{feature_name}-{int(time.time())}"`.
-
-**[ACK] payload (Step 5c) -- Developer-specific data:**
+One SendMessage to User. No protocol markers, no SYN/ACK, no message ID:
 
 ```python
 SendMessage(
   to="User",
-  summary="Code fixed: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Code changes complete.
-
-[ACK] {message_id}
+  summary="Developer: {feature_name} (STORY-N done)",
+  message=f"""@User: [Feature: {feature_name}] Developer cycle complete.
 
 Fixed tests:
 - test_name_1
@@ -172,10 +168,10 @@ Verifier output: all sidecars passed verify_ac_map.py
 
 Changes summary: [Describe what was fixed and why]
 
---- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
+--- STATUS: DONE | READY: yes | BLOCKER: none""")
 ```
 
-**The completion message is REJECTED if the AC map sidecars don't exist or `verify_ac_map.py` returns failure for any story.** Don't claim COMPLETE in that state -- fix the gap first or escalate.
+**Do NOT send this until** every advanced story has an AC implementation map sidecar AND `verify_ac_map.py` returned success for it. If the verifier fails on any story, fix the gap (write the missing wiring) before flipping that story or sending the completion message. The Tester re-runs the verifier as Gate B, so a lie costs you a cycle.
 
 ## Cannot Proceed (Blocked)
 

@@ -1,6 +1,6 @@
 # TestCreator Agent Instructions
 
-See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, ACK, Escalation, Progress).
+See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, Starting Message, Escalation, Progress).
 
 ---
 
@@ -39,7 +39,7 @@ Following the base workflow from _BASE.md:
        --stories-dir _output/{name}/stories
    ```
 9. **Update progress file** -- Mark Tests: DONE, list test function names AND story IDs covered, AND list any stub-test files written (see "Tests You Cannot Write at Your Seam" below)
-10. **Complete the 3-way handshake** (see [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents))
+10. **Send your completion message** (one SendMessage; format below) and accept the orchestrator's `shutdown_request`. See [_BASE.md "Completion Outcomes"](_BASE.md#completion-outcomes-three-cases).
 
 ---
 
@@ -108,17 +108,13 @@ choose, depending on framework idioms:
 
 ## Completion Message Format
 
-Run the 3-way handshake mechanics from [_BASE.md section Completion Handshake Workflow](_BASE.md#completion-handshake-workflow-all-agents). Use `message_id = f"tc-tests-{feature_name}-{int(time.time())}"`.
-
-**[ACK] payload (Step 5c) -- TestCreator-specific data:**
+One SendMessage to User. No protocol markers, no SYN/ACK, no message ID:
 
 ```python
 SendMessage(
   to="User",
   summary="Tests complete: {feature_name}",
   message=f"""@User: [Feature: {feature_name}] Tests created.
-
-[ACK] {message_id}
 
 Test file: <path where you created the file>
 Test functions: <count and names>
@@ -127,5 +123,5 @@ Coverage: All acceptance criteria covered for target stories
 Stories advanced to IN_DEV: <STORY-1, STORY-3, ...>
 Stories left at TODO (deps not met): <STORY-N or "none">
 
---- STATUS: COMPLETE | READY: yes | BLOCKER: none""")
+--- STATUS: DONE | READY: yes | BLOCKER: none""")
 ```

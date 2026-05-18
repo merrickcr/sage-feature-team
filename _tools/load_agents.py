@@ -82,6 +82,7 @@ AGENT_SLUGS = {
     "TestCreator": "test-creator",
     "Developer": "developer",
     "Tester": "tester",
+    "EpicVerifier": "epic-verifier",
 }
 
 

@@ -43,10 +43,11 @@ From the JSON, extract `agents.ProductOwner` and `config_summary.absolute_root_d
 - `agents/product-owner.md` § Your Job
 - `agents/product-owner.md` § Spec Format (Markdown) -- exact spec layout
 - `agents/product-owner.md` § Story Format (YAML -- one file per story) -- YAML schema, status legend, optional fields, rules for stories
+- `agents/product-owner.md` § Epics -- when to use multiple epics (default: 1), EPIC YAML schema, rules for epics
 - `agents/product-owner.md` § Critical Rules
 
 **Ignore these sections** (team-mode workflow that does not apply when invoked as a skill):
-- `_BASE.md` § STOP / SILENCE RULE / ACK FIRST / Workflow / Completion Handshake / Escalation Pattern / Progress File Updates / Key Rules (All Agents)
+- `_BASE.md` § STOP / SILENCE RULE / Starting Message / Workflow / Completion Outcomes / Progress File Updates / Key Rules (All Agents)
 - `product-owner.md` § ProductOwner Workflow (After Receiving Task) -- this skill defines its own workflow below
 - `product-owner.md` § Approval Process (Two Steps) -- this skill handles approval inline (Step 4 below)
 - `product-owner.md` § Completion Message Format -- this skill reports to the user as plain text instead
@@ -60,8 +61,9 @@ If `success` is false, surface the loader's `error` and stop.
 - Determine `output_dir` (default `_output`); create it if missing
 - Compute paths using `feature_name`:
   - `spec_file    = <output_dir>/<feature_name>/spec.md`
+  - `epics_dir    = <output_dir>/<feature_name>/epics/`  (always written -- every feature has at least one epic)
   - `stories_dir  = <output_dir>/<feature_name>/stories/`
-- If `spec_file` already exists OR `stories_dir` exists and is non-empty, ask the user: overwrite, pick a different feature_name, or abort.
+- If `spec_file` already exists OR `epics_dir` exists and is non-empty OR `stories_dir` exists and is non-empty, ask the user: overwrite, pick a different feature_name, or abort.
 
 ---
 
@@ -69,20 +71,24 @@ If `success` is false, surface the loader's `error` and stop.
 
 1. **Read project instructions** from the rendered prompt that are relevant to spec/stories writing.
 2. **Create the spec file** at `spec_file` -- follow `agents/product-owner.md` § Spec Format (Markdown) exactly. Sections: Overview, Requirements, Edge Cases, Technical Notes. **No Acceptance Criteria section** -- AC live inside the story YAMLs. Focus on WHAT, not HOW.
-3. **Create the stories directory** at `stories_dir` and write one YAML file per story (`STORY-1.yaml`, `STORY-2.yaml`, ...). Schema, status legend, optional fields, and rules for stories are in `agents/product-owner.md` § Story Format (YAML -- one file per story). Key invariants:
+3. **Decide how many epics to create** -- consult `agents/product-owner.md` § Epics § When to use multiple epics. Default to ONE epic (`EPIC-1`) that wraps every story; split only when warranted. Create `epics_dir` and write the epic YAML files. Every feature has at least one epic.
+4. **Create the stories directory** at `stories_dir` and write one YAML file per story (`STORY-1.yaml`, `STORY-2.yaml`, ...). Schema, status legend, optional fields, and rules for stories are in `agents/product-owner.md` § Story Format (YAML -- one file per story). Key invariants:
    - Every AC for the feature lives in exactly one story (no orphans, no duplicates)
    - AC IDs (`AC1`, `AC2`, ...) unique across the entire feature
    - Story IDs stable (`STORY-1`, ...) -- never renumber after approval
    - Filename matches `id` (`STORY-1.yaml` contains `id: STORY-1`)
-   - Story dependencies form a DAG (no cycles)
+   - Story dependencies form a DAG (no cycles) and may only name stories in the same epic
    - All stories start at `status: TODO`
-4. **Apply the role's Critical Rules throughout** -- see `agents/product-owner.md` § Critical Rules (snake_case feature name, AC must be testable, valid YAML, no tests/no code).
-5. **Show the user a brief summary** (counts of requirements / stories / total AC) and ask for review. They'll respond with feedback or `APPROVED`.
-6. **On feedback:** update the spec/stories, summarize the diff, re-request approval. Loop. **FEEDBACK != APPROVAL** -- only an explicit `APPROVED` finishes the skill.
-7. **On `APPROVED`:** report completion to the user as plain text:
+   - Every story file MUST include an `epic: EPIC-N` field; the union of all epics' `story_ids:` must equal the full set of story files
+5. **Apply the role's Critical Rules throughout** -- see `agents/product-owner.md` § Critical Rules (snake_case feature name, AC must be testable, valid YAML, no tests/no code).
+6. **Show the user a brief summary** (counts of requirements / epics / stories / total AC) and ask for review. They'll respond with feedback or `APPROVED`.
+7. **On feedback:** update the spec/epics/stories, summarize the diff, re-request approval. Loop. **FEEDBACK != APPROVAL** -- only an explicit `APPROVED` finishes the skill.
+8. **On `APPROVED`:** report completion to the user as plain text:
    ```
    Spec:        <spec_file>
+   Epics dir:   <epics_dir>
    Stories dir: <stories_dir>
+   Epics:       EPIC-1.yaml, EPIC-2.yaml, ... (<M> total, all status: TODO)
    Stories:     STORY-1.yaml, STORY-2.yaml, ... (<N> total, all status: TODO)
    AC:          <total_ac> distributed across <N> stories
    ```

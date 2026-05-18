@@ -230,7 +230,7 @@ def dedup_workers(workers):
     The JSON store is append-only -- every transcript captured at every
     scheduling scan goes in. But when Claude Code's `Agent(name=X)` is called
     repeatedly for the same worker name (which happens automatically as the
-    team conversation evolves and handshake messages flow), each invocation
+    team conversation evolves and worker messages flow), each invocation
     produces a new transcript file. Subsequent transcripts capture the FULL
     growing team conversation, so they cumulatively contain the same messages
     as earlier transcripts plus a bit more.

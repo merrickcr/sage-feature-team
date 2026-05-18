@@ -90,7 +90,7 @@ Send a SendMessage to `Tester` whose body includes:
 - `Test scope: <test_scope>` (literal -- `"full regression"` or the targeted test names)
 - `Reference: HANDBOOK.md`
 
-Run **ACK + completion monitoring** (Step 6).
+Run **starting-message + completion monitoring** (Step 6).
 
 Parse Tester's completion message:
 - Extract `TEST_FAILURE: <test_name> | expected=<x> | actual=<y> | error=<msg>` lines
@@ -108,9 +108,9 @@ max_cycles  = (from --max-cycles or config)
 
 WHILE cycle_count <= max_cycles:
   [1] Send Developer task with current failing test names + previous failure details
-      Run ACK + completion monitoring
+      Run starting-message + completion monitoring
   [2] Send Tester task (same scope as discovery)
-      Run ACK + completion monitoring
+      Run starting-message + completion monitoring
       Parse TEST_FAILURE lines
   [3] If all PASSED -> break (success)
       If FAILED and cycle_count < max -> cycle_count++, loop
@@ -136,25 +136,20 @@ Send to `Tester`, body includes:
 
 ### Idle = completion
 
-When an agent sends `STATUS: COMPLETE | READY: yes` and goes idle, that idle notification IS the completion signal. Read the agent's last message and route immediately.
+When an agent sends `STATUS: DONE | READY: yes` (or `STATUS: FAILED`) and goes idle, that idle notification IS the completion signal. Read the agent's last message and route immediately.
 
 ---
 
-## Step 6: Monitoring (ACK + Completion + Handshake)
+## Step 6: Monitoring (Starting Message + Completion)
 
 Same as `/sage-feature-team` -- see that skill's "Step 8: Monitoring" section. Briefly:
 
-| Phase | Soft | Hard |
+| Phase | Deadline | On miss |
 |---|---|---|
-| ACK | 30s gentle check, 45s reminder | 60s escalate |
-| Completion | 5min status check | 8min escalate |
+| Starting message | 60s | Escalate -- send `shutdown_request`, treat agent as dead, abort cycle |
+| Completion | 8 min (work timeout) | Escalate -- send `shutdown_request`, treat as deadlocked, abort cycle |
 
-For the 3-way handshake (`[SYN]` -> `[SYN-ACK]` -> `[ACK]+DATA` -> routing):
-1. Reply with `[SYN-ACK] <same message_id>` within 1-2s of `[SYN]`
-2. After receiving `[ACK]+DATA`, send routing message (acts as final ACK)
-3. Track processed message IDs; resend same response on duplicates
-
-Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
+No SYN/SYN-ACK/ACK handshake. No message-ID dedup. The agent sends one starting message and one completion message; you re-read story state (or test output) to route. Send `shutdown_request` after each completion to clean up the worker.
 
 ---
 
@@ -177,7 +172,7 @@ All tests passing. See git diff for code changes.
 @User: [Dev-Test] Workflow Blocked
 
 Status: ESCALATION
-Blocker: <ACK timeout | Work timeout | Max cycles exceeded | Test hang>
+Blocker: <starting-message timeout | Work timeout | Max cycles exceeded | Test hang>
 
 Details: <list failing tests, last error, agent that hung>
 Recommended action: <what the user should do>
@@ -192,7 +187,7 @@ Recommended action: <what the user should do>
 - Default to full regression unless `/sage-dev-test <test_names>` was given
 - Send the first task to **Tester** (initial discovery), then alternate Developer -> Tester per cycle
 - Trust the Tester's `.sage/` instructions for the test command -- don't hardcode one here
-- Send `[SYN-ACK]` within 1-2s of `[SYN]`; track processed message IDs
+- Treat the agent's single completion message as authoritative -- no SYN-ACK reply, no message-ID tracking, no dedup
 
 **DON'T:**
 - Don't ask the user for a feature name or requirements
@@ -204,7 +199,7 @@ Recommended action: <what the user should do>
 
 ## References
 
-- `HANDBOOK.md` -- Full protocol (handshake, ACK, escalation, Monitor)
+- `HANDBOOK.md` -- Full protocol (completion reporting model, escalation, Monitor)
 - `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable patterns shared with `sage-feature-team`
 - `agents/developer.md`, `agents/tester.md` -- Agent role files
 - `examples/chatbot/.sage/sage-tester-config.yaml` -- Reference Tester config

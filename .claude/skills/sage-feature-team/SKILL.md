@@ -12,8 +12,10 @@ You are the **Team Lead / Orchestrator** for a multi-agent feature development w
 
 The workflow has two phases:
 
-1. **Phase 1 -- ProductOwner (single agent, sequential).** A long-lived ProductOwner agent creates the spec and per-story YAML files, iterates on user feedback, and waits for `APPROVED`.
-2. **Phase 2 -- Parallel scheduler.** Once stories are approved, you become a scheduler. You scan the stories directory and **spawn ephemeral, per-story worker agents** (one per ready story, up to `max_parallel_workers`). Each worker handles one story, reports completion, and is shut down. You re-scan and spawn the next batch until every story is `DONE` or escalated.
+1. **Phase 1 -- ProductOwner (single agent, sequential).** A long-lived ProductOwner agent creates the spec, the epic YAML files (at least one), and per-story YAML files; iterates on user feedback; and waits for `APPROVED`.
+2. **Phase 2 -- Parallel scheduler with verification checkpoints.** Once stories are approved, you become a scheduler. You scan the stories directory and **spawn ephemeral, per-story worker agents** (one per ready story, up to `max_parallel_workers`). Each worker handles one story, reports completion, and is shut down. You re-scan and spawn the next batch.
+
+   When all stories within an **epic** reach `DONE`, you spawn an **EpicVerifier** worker for that epic to run the verification checkpoint. On success the epic flips to `VERIFIED` and downstream epics become eligible. On failure, specific stories are re-opened with details. The workflow ends when every epic is `VERIFIED`, or stories/epics are escalated.
 
 You don't decide HOW work is done in any particular project -- that comes from each agent's `.sage/sage-<agent>-config.yaml`, which the loader bakes into the agent prompts.
 
@@ -39,7 +41,21 @@ _output/<feature_name>/stories/STORY-2.yaml
 ...
 ```
 
-Each YAML carries its own status. Concurrent workers update their own story file via `_tools/update_story_status.py` (locked, atomic).
+Epics live as **per-epic YAML files** alongside stories:
+```
+_output/<feature_name>/epics/EPIC-1.yaml
+_output/<feature_name>/epics/EPIC-2.yaml
+...
+```
+
+Every feature has at least one epic (PO writes at minimum `EPIC-1.yaml`). Every story file has an `epic: EPIC-N` field naming its parent epic.
+
+Verification artifacts (written by EpicVerifier) live at:
+```
+_output/<feature_name>/verification/EPIC-N.md
+```
+
+Each YAML carries its own status. Concurrent workers update their own story file via `_tools/update_story_status.py` (locked, atomic); epic YAMLs are flipped via `_tools/update_epic_status.py`.
 
 ---
 
@@ -54,7 +70,9 @@ From the user's invocation, compute these values once and reuse them throughout:
 - **max_parallel_workers** -- from `sage-config.yaml` -> `limits.max_parallel_workers` (default 4)
 - **global_timeout_seconds** -- from `sage-config.yaml` -> `limits.global_timeout_seconds` (default 3600)
 - **spec_file** -- `<output_dir>/<feature_name>/spec.md`
+- **epics_dir** -- `<output_dir>/<feature_name>/epics/`
 - **stories_dir** -- `<output_dir>/<feature_name>/stories/`
+- **verification_dir** -- `<output_dir>/<feature_name>/verification/` (created on first verifier run)
 - **progress_file** -- `<output_dir>/<feature_name>/progress.md`
 
 **`--resume <feature_name>`** continues from existing artifacts.
@@ -123,7 +141,7 @@ SendMessage to `ProductOwner`:
 - `Progress file: <progress_file>`
 - `Reference: HANDBOOK.md`
 
-Run **ACK + completion monitoring** (Step 8).
+Run **starting-message + completion monitoring** (Step 8).
 
 ### 5c. Forward questions to the User; require explicit APPROVED
 
@@ -132,7 +150,7 @@ Run **ACK + completion monitoring** (Step 8).
 
 ### 5d. Record token usage and shut down ProductOwner
 
-After ProductOwner's completion handshake:
+After ProductOwner's completion message arrives and you've routed approval back to the User:
 
 1. **Record token usage via discovery** (mechanical, idempotent -- doesn't depend on you remembering anything per-spawn):
    ```bash
@@ -167,11 +185,12 @@ You now own a scheduling loop. You read the stories directory, spawn per-story w
 In your own working memory (no need to write to disk), maintain:
 
 ```
-in_flight        = {}   # STORY-N -> {role, agent_name, started_at, cycle_n}
-spawned_workers  = set()  # every worker name you've Agent()-spawned and not yet confirmed shut down (incl. ProductOwner if Phase 1 ran). Source of truth for Step 9 teardown.
-cycle_count      = {}   # STORY-N -> int (Developer->Tester rounds completed; counts when Tester re-flips to IN_DEV)
-escalated        = set()  # STORY-Ns that hit max_cycles or are unrecoverable
-start_time       = now()
+in_flight             = {}   # STORY-N or EPIC-N -> {role, agent_name, started_at, cycle_n}
+spawned_workers       = set()  # every worker name you've Agent()-spawned and not yet confirmed shut down (incl. ProductOwner if Phase 1 ran). Source of truth for Step 9 teardown.
+cycle_count           = {}   # STORY-N -> int (Developer->Tester rounds completed; counts when Tester or EpicVerifier re-flips to IN_DEV)
+verify_cycle_count    = {}   # EPIC-N -> int (EpicVerifier re-runs after FAILED outcomes)
+escalated             = set()  # STORY-Ns AND EPIC-Ns that hit max_cycles or are unrecoverable
+start_time            = now()
 ```
 
 When you `Agent(...)` to spawn a worker, add `worker_name` to `spawned_workers`. When you confirm a worker has shut down (received `shutdown_response approve=true`), remove it.
@@ -204,18 +223,20 @@ Returns JSON like:
 ```json
 {
   "success": true,
-  "TestCreator":     ["STORY-2"],            // TODO + every dep at status DONE
+  "TestCreator":     ["STORY-2"],            // TODO + every dep at status DONE (incl. epic_dep at VERIFIED)
   "Developer":       ["STORY-4", "STORY-5"], // IN_DEV + every dep at status DONE
   "Tester":          ["STORY-1"],            // TESTING + every dep at status DONE
   "in_progress":     ["STORY-7"],            // CREATE_TESTS (TestCreator owned it; resume-only)
-  "blocked_on_deps": {"STORY-3": ["STORY-1 (TESTING, needs DONE)"]},
+  "blocked_on_deps": {"STORY-3": ["STORY-1 (TESTING, needs DONE)", "epic_dep:EPIC-2 -> EPIC-1 (DONE, needs VERIFIED)"]},
   "blocked":         ["STORY-6"],            // status BLOCKED
   "done":            [],
-  "all_statuses":    {"STORY-1": "TESTING", ...}
+  "all_statuses":    {"STORY-1": "TESTING", ...},
+  "epics":           {"EPIC-1": {"status": "DONE", "rollup": "DONE", ...}, ...},
+  "epic_ready_to_verify":   ["EPIC-1"]       // all stories DONE, on-disk status != VERIFIED -- spawn EpicVerifier
 }
 ```
 
-**The script's lists are authoritative.** Spawn workers only for stories that appear in `TestCreator`, `Developer`, or `Tester`. Never spawn for a story that's only in `blocked_on_deps`, `blocked`, `in_progress`, or `done` -- those are explicitly NOT eligible.
+**The script's lists are authoritative.** Spawn workers only for stories that appear in `TestCreator`, `Developer`, or `Tester`, AND spawn EpicVerifier workers for any epic in `epic_ready_to_verify`. Never spawn for a story that's only in `blocked_on_deps`, `blocked`, `in_progress`, or `done` -- those are explicitly NOT eligible.
 
 **Critical rule the script enforces:** a dependency is satisfied **only** when its `status == "DONE"`. `TESTING` is NOT close enough. `IN_DEV` is NOT close enough. Only `DONE`. This matters on resume (e.g., you interrupted last run while STORY-1 was at TESTING): downstream TODO stories that depend on STORY-1 stay in `blocked_on_deps` until STORY-1 actually reaches DONE.
 
@@ -228,18 +249,19 @@ Quick reference of what the script returns vs. action:
 | `TestCreator` | Eligible -- spawn `TestCreator-<STORY-N>` |
 | `Developer`   | Eligible -- spawn `Developer-<STORY-N>` (add `-cN` on re-cycles) |
 | `Tester`      | Eligible -- spawn `Tester-<STORY-N>` (story-scoped, story-only) |
+| `epic_ready_to_verify` | Eligible -- spawn `EpicVerifier-<EPIC-N>` (one per epic; first invocation has no `-cN` suffix; re-runs add `-cN`) |
 | `in_progress` | CREATE_TESTS state -- typically left over from interrupt. Treat as in-flight. If it's stale (no real worker), flip back to TODO via `update_story_status.py` to let it re-trigger. |
-| `blocked_on_deps` | Skip. Will be re-evaluated next scan after its deps reach DONE. |
+| `blocked_on_deps` | Skip. Will be re-evaluated next scan after its deps reach DONE/VERIFIED. |
 | `blocked`     | Skip. User must resolve out-of-band (edit YAML, `--resume`). |
 | `done`        | Skip. |
 
-Available slots = `max_parallel_workers - len(in_flight)`. Spawn `min(slots, len(eligible))` workers.
+Available slots = `max_parallel_workers - len(in_flight)`. Spawn `min(slots, len(eligible))` workers. Story workers and EpicVerifier workers share the same parallel budget.
 
-If `len(in_flight) == 0` AND no eligible stories AND not every story is `DONE`: **deadlock**. Escalate (Step 6f).
+If `len(in_flight) == 0` AND no eligible stories AND no epic ready to verify AND not every epic is `VERIFIED`: **deadlock**. Escalate (Step 6f).
 
-### 6c. Spawn a per-story worker
+### 6c. Spawn a per-story worker (or EpicVerifier worker)
 
-Worker name pattern: `<Role>-<STORY-N>` (e.g., `TestCreator-STORY-3`, `Developer-STORY-7`, `Tester-STORY-2`). Names must be unique within the team -- if a worker for the same story+role was previously spawned and shut down, append a `-cN` suffix where N is the cycle count for that story (e.g., `Developer-STORY-3-c2`).
+Worker name pattern: `<Role>-<STORY-N>` for story workers (e.g., `TestCreator-STORY-3`, `Developer-STORY-7`, `Tester-STORY-2`) or `EpicVerifier-<EPIC-N>` for verifier workers. Names must be unique within the team -- if a worker for the same story+role (or same epic) was previously spawned and shut down, append a `-cN` suffix where N is the cycle count for that scope (e.g., `Developer-STORY-3-c2`, `EpicVerifier-EPIC-1-c2`).
 
 ```python
 Agent(
@@ -296,29 +318,60 @@ SendMessage:
 
 The Tester role file has the story-scoped selector logic: it reads the project's tagging convention from `.sage/sage-test-creator-config.yaml` and runs only that story's tests. Multiple Tester workers can run concurrently as long as the project's test isolation allows it.
 
+#### EpicVerifier worker (for an epic with all stories DONE)
+
+SendMessage:
+- `@User: [Feature: <feature_name>] [EPIC-N]` opener
+- `[Task: verify-EPIC-N-<feature_name>]`
+- `Epic: EPIC-N`
+- `Feature: <feature_name>`
+- `Stories in scope: STORY-1, STORY-2, ...` (the list from the epic's `story_ids:`)
+- `Verification artifact: <verification_dir>/EPIC-N.md`
+- `Stories dir: <stories_dir>`
+- `Epics dir: <epics_dir>`
+- `Reference: HANDBOOK.md`
+
+The EpicVerifier role file handles the `verify_epic.py` precondition gate, the cross-story regression run (using the project's tagging convention to scope), the optional epic-level acceptance interpretation, the verification artifact write, and the `update_epic_status.py EPIC-N VERIFIED` flip. Story re-opens on failure happen through `update_story_status.py` exactly the way the Tester re-opens them.
+
 ### 6e. Wait for ANY worker to complete; reschedule
 
 After spawning a batch, you wait. Don't block on a specific worker -- wait on the team and act on whichever completes first.
 
-For each completion (handshake `[ACK]+DATA` from a worker):
+For each worker completion message:
 
-1. **Run the standard handshake** (Step 8 / `HANDBOOK.md`): reply `[SYN-ACK]`, accept `[ACK]+DATA`, send a routing message that acts as the implicit final ACK. The routing message can simply be: `@<worker>: Acknowledged. You are released -- shutting down.`
-2. **Re-read the completed story's YAML** to learn its new status (the worker already flipped it via `update_story_status.py`).
-3. **Update bookkeeping based on the new story status:**
-   - **Story is now `IN_DEV`** (from Tester or via re-cycle):
-     - `cycle_count[STORY-N] += 1`. The Tester's `[ACK]` payload tells you *why* it sent the story back -- Gate A (test/build/compile/dex failure) or Gate B (AC implementation map gate). **Trust the verdict; don't re-verify.** Carry the failure details forward (failing test list, build error excerpt, or `verify_ac_map.py` JSON) into the next Developer task message verbatim. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and run per-story escalation (Step 6f).
+1. **Re-read the source-of-truth YAML.**
+   - For a story worker: re-read the completed story's YAML -- the worker already flipped it via `update_story_status.py`.
+   - For an EpicVerifier worker: re-read the epic's YAML AND every story in the epic (the verifier may have re-opened stories on failure).
+2. **Update bookkeeping based on the new state:**
+
+   **For story workers:**
+   - **Story is now `IN_DEV`** (Tester re-cycled it, or Developer-after-TestCreator):
+     - If the previous worker was Tester: `cycle_count[STORY-N] += 1`. The Tester's completion payload tells you *why* -- Gate A (test/build/compile/dex failure) or Gate B (AC implementation map gate). **Trust the verdict; don't re-verify.** Carry the failure details forward (failing test list, build error excerpt, or `verify_ac_map.py` JSON) into the next Developer task message verbatim. If `cycle_count[STORY-N] > max_cycles`: add to `escalated` and run per-story escalation (Step 6f).
+     - If the previous worker was TestCreator: ready for Developer next scan. TestCreator may also have written stub tests for AC its seam can't cover.
+     - If the previous worker was EpicVerifier (cross-story regression or AC map regression re-opened the story): `cycle_count[STORY-N] += 1`. Carry the verifier's failure details into the next Developer task message. If `cycle_count > max_cycles`: escalate per Step 6f.
    - **Story is now `DONE`** (from Tester): both gates passed. Nothing more for this story.
    - **Story is now `TESTING`** (from Developer): ready for Tester next scan. (Developer will not have flipped without first running `verify_ac_map.py` and getting success.)
-   - **Story is now in a state implying TestCreator finished** (was `TODO`/`CREATE_TESTS`, now `IN_DEV` from TestCreator): ready for Developer next scan. TestCreator may also have written stub tests for AC its seam can't cover.
-   - **Story is now `BLOCKED`** (any worker reported Outcome 3 -- truly unrecoverable): the worker already marked it BLOCKED via `update_story_status.py` and included a blocker reason in its `[ACK]` payload. **Don't try to fix it or re-cycle.** Add to `escalated`, log the blocker, surface to User immediately:
+   - **Story is now `BLOCKED`** (any worker reported Outcome 3 -- truly unrecoverable): the worker already marked it BLOCKED with a blocker reason in the YAML and included matching details in the completion message. **Don't try to fix it or re-cycle.** Add to `escalated`, log the blocker, surface to User immediately:
      ```
      @User: [Feature: <feature_name>] STORY-N marked BLOCKED by <Role>
-     Reason: <blocker reason from [ACK] payload>
+     Reason: <blocker reason from completion payload>
      Details: <relevant context from worker's report>
      Continuing other stories. Resolve this one out-of-band (edit spec, fix config, etc.) and re-run with --resume.
      ```
      Continue the scheduler -- one BLOCKED story doesn't stop the rest.
-4. **Shut down the worker** to actually remove it from the team panel:
+
+   **For EpicVerifier workers:**
+   - **Epic is now `VERIFIED`** (success): the verifier wrote `<verification_dir>/EPIC-N.md` and flipped the epic YAML. Downstream epics that depend on this one are now eligible (next scan will surface their stories).
+   - **Verifier reported `FAILED`** (stories re-opened to IN_DEV with `cross_story_regression` or `ac_map_regression` reasons): the verifier did NOT write the artifact and did NOT flip the epic. Track `verify_cycle_count[EPIC-N] += 1`. If `verify_cycle_count[EPIC-N] > max_cycles`: add `EPIC-N` to `escalated` and escalate (Step 6f) -- the same `max_cycles` budget gates verifier re-runs. Otherwise the next scan will see the re-opened stories at IN_DEV and route them back to Developer. After those stories cycle through Tester and reach DONE again, the epic will re-surface in `epic_ready_to_verify` and trigger another EpicVerifier-EPIC-N-cN run.
+   - **Verifier reported `BLOCKED`** (e.g., epic acceptance gap with no owning story, missing tagging convention): the verifier already flipped the epic YAML to BLOCKED with a reason. Add the epic to `escalated`, surface to User immediately:
+     ```
+     @User: [Feature: <feature_name>] EPIC-N verification BLOCKED
+     Reason: <blocker reason from verifier completion payload>
+     Continuing other epics. Resolve out-of-band (amend spec, add story, etc.) and re-run with --resume.
+     ```
+     Continue the scheduler -- one BLOCKED epic doesn't stop the rest.
+
+3. **Shut down the worker** to actually remove it from the team panel:
    ```python
    SendMessage(
      to=worker_name,
@@ -326,7 +379,7 @@ For each completion (handshake `[ACK]+DATA` from a worker):
    )
    ```
    Wait briefly (up to ~10s) for the worker's `shutdown_response approve=true`. Their process terminates on approve and they disappear from the team panel. Once confirmed, remove `worker_name` from `spawned_workers`. If they don't respond or send `approve=false`, log the worker name -- Step 9 (Disband Team) will retry shutdown for any survivors at the end of the workflow. **Never skip this step**: without it, the worker stays idle in the team panel indefinitely. (Note: `TaskStop` does NOT remove agents from the team panel -- only `shutdown_request` does.)
-5. **Remove from `in_flight`** and re-run the scheduling rule (6b) to pick up newly eligible stories.
+4. **Remove from `in_flight`** and re-run the scheduling rule (6b) to pick up newly eligible stories.
 
 ### 6f. Per-story escalation
 
@@ -353,8 +406,8 @@ At the top of every scan, check `now() - start_time >= global_timeout_seconds`. 
 ### 6h. Loop exit
 
 The scheduler loop exits cleanly when:
-- Every story in `stories_dir` is `status: DONE` -> success
-- OR every remaining non-DONE story is in `escalated` -> partial success (some stories escalated)
+- Every epic in `epics_dir` is `status: VERIFIED` -> success
+- OR every remaining non-VERIFIED epic is in `escalated` (and every non-DONE story in non-escalated epics is also DONE) -> partial success
 - OR the global timeout fired -> escalation
 
 ---
@@ -363,25 +416,35 @@ The scheduler loop exits cleanly when:
 
 Worker token usage was recorded incrementally by `discover_and_record.py` at every scheduling scan (Step 6b). The orchestrator's own main-conversation cost isn't tracked in the per-feature TOKENS file -- it's part of the user's session total (visible via Claude Code's `/usage` command).
 
+Before sending the report, regenerate the human-readable rollup so the user has a fresh snapshot to compare against:
+```bash
+python .sage/_tools/rollup_status.py --feature <feature_name> --write
+```
+This rewrites `<output_dir>/<feature_name>/progress.md` from the authoritative YAML state. Non-fatal -- if it fails, log and proceed.
 
-### Success (Full Mode, all stories DONE)
+
+### Success (Full Mode -- all epics VERIFIED)
 
 ```
 @User: [Feature: <feature_name>] Feature Development Complete
 
 Status: SUCCESS
 Stories: <N> total, all DONE
+Epics: <M> total, all VERIFIED
 Cycles used (per story): STORY-1=1, STORY-2=2, ...
+Verify cycles (per epic): EPIC-1=1, EPIC-2=2, ...
 Wall clock: <elapsed>s
 
 Artifacts:
-- Spec:        <spec_file>
-- Stories dir: <stories_dir>
-- Tests:       see git diff
-- Code:        see git diff
+- Spec:             <spec_file>
+- Epics dir:        <epics_dir>
+- Stories dir:      <stories_dir>
+- Verification dir: <verification_dir>
+- Tests:            see git diff
+- Code:             see git diff
 ```
 
-### Partial Success (some stories escalated)
+### Partial Success (some stories or epics escalated)
 
 ```
 @User: [Feature: <feature_name>] Feature Development Partially Complete
@@ -389,8 +452,11 @@ Artifacts:
 Status: PARTIAL
 Stories DONE:      STORY-1, STORY-3, ...
 Stories ESCALATED: STORY-2 (max_cycles), STORY-5 (BLOCKED: ...)
+Epics VERIFIED:    EPIC-1, EPIC-3, ...
+Epics ESCALATED:   EPIC-2 (max_verify_cycles), ...
 
 See <stories_dir> for blocked_reason on each escalated story.
+See <epics_dir> for blocked_reason on each escalated epic.
 ```
 
 ### Global Timeout
@@ -409,40 +475,34 @@ Stories left: ...
 
 ---
 
-## Step 8: Monitoring (ACK + Completion + Handshake)
+## Step 8: Monitoring (Starting Message + Completion)
 
-### ACK monitoring (every task you send)
+You watch two events per worker: the starting message (within 60s) and the completion message (within the work timeout). Both arrive as plain `SendMessage`s. No SYN/SYN-ACK/ACK, no message-ID dedup, no retries -- a missed deadline means the worker is dead; mark the story BLOCKED and move on.
+
+### Starting-message monitoring (every task you send)
 
 | T | Action |
 |---|---|
-| 0-30s | Wait for `STATUS: ACKNOWLEDGED` |
-| 30s | If no ACK, send: `@<worker>: Did you receive my message?` |
-| 45s | If no ACK, send: `@<worker>: Please send ACK when ready.` |
-| 60s | If no ACK, **escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "ack_timeout"})`, mark its story `BLOCKED` with reason `ack_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling |
+| 0-60s | Wait for the worker's `Starting on STORY-N` SendMessage |
+| 60s | **Escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "ack_timeout"})`, mark its story `BLOCKED` with reason `ack_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling. No graduated 30s/45s nudges -- one deadline. |
 
 Use `ScheduleWakeup` so you don't block while waiting; or use `Monitor` on the team to receive worker messages reactively.
 
-### Completion monitoring
-
-After ACK:
+### Completion monitoring (after the starting message arrives)
 
 | T | Action |
 |---|---|
-| 0-`timeout_work_hard`s (default 480s = 8min) | Wait for completion |
-| `timeout_work_hard / 2` | Send a gentle status check |
+| 0-`timeout_work_hard`s (default 480s = 8min) | Wait for the completion message |
+| `timeout_work_hard / 2` | Optional gentle status check (plain `SendMessage`); the worker is silent during work but can answer queries if reachable |
 | `timeout_work_hard` | **Escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "work_timeout"})`, mark its story `BLOCKED` with reason `work_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling |
 
-### Handshake (Team Lead side)
+### On completion message receipt
 
-When a worker sends `[SYN] <message_id>`:
-1. Within 1-2s, reply `[SYN-ACK] <same message_id>`
-2. Wait for `[ACK] <same message_id>` + completion data
-3. Process the data (re-read story YAML)
-4. Send the routing acknowledgment message -- plain-text acknowledgment of receipt (NOT itself a shutdown)
-5. Send `shutdown_request` to actually terminate the worker: `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "task complete"})`. Wait for `shutdown_response approve=true` -- their process terminates on approve. Remove the worker from `spawned_workers`. **`TaskStop` does NOT terminate teammate agents in the panel -- only `shutdown_request` does.**
-6. Track processed message IDs; on duplicate `[SYN]` or `[ACK]`, resend the same response (don't reprocess)
+1. Re-read the story YAML -- that's the source of truth. The worker already flipped it.
+2. Route per Step 6e based on the new status.
+3. Send `shutdown_request`; on `shutdown_response approve=true`, remove from `spawned_workers`.
 
-Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
+That's the whole loop. No handshake state, no message-ID tracking, no dedup table. If a duplicate completion message arrives somehow, re-reading the YAML is idempotent (no status change -> no new routing).
 
 ---
 
@@ -450,7 +510,7 @@ Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 
 **This step runs unconditionally** after Step 7 (Final Report) -- success path, partial-success path, global-timeout path, AND the deadlock escalation path. The user invoked the skill; the skill owns the team's lifecycle from `TeamCreate` (Step 4) to `TeamDelete` here.
 
-1. **Identify survivors:** any worker name still in `spawned_workers` after Steps 5d and 6e ran. Ideally this set is empty by the time you reach Step 9 -- workers should have been shut down individually at each completion. But ACK timeouts, work timeouts, deadlock escalations, and missed shutdown_response approvals can leave stragglers.
+1. **Identify survivors:** any worker name still in `spawned_workers` after Steps 5d and 6e ran. Ideally this set is empty by the time you reach Step 9 -- workers should have been shut down individually at each completion. But starting-message timeouts, work timeouts, deadlock escalations, and missed shutdown_response approvals can leave stragglers.
 
 2. **Send `shutdown_request` to every survivor** and collect responses:
    ```python
@@ -483,18 +543,21 @@ Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 - Spawn per-story workers up to `max_parallel_workers`; never exceed the cap
 - Use the role name + story id for worker names (`TestCreator-STORY-3`); add `-cN` suffix on re-cycles to keep names unique
 - Tester workers always run **story-scoped** in this skill (`Test scope: story STORY-N`) so multiple Testers can run in parallel
-- After each worker completes the handshake, send `SendMessage(to=worker, message={"type": "shutdown_request", ...})` to actually terminate it. A plain-text "you are released" message does NOT remove the worker from the team panel -- only `shutdown_request` -> `shutdown_response approve=true` does. `TaskStop` doesn't work either. Track every spawned worker in `spawned_workers` and remove on confirmed shutdown.
+- EpicVerifier workers run **epic-scoped**. They share the `max_parallel_workers` budget with story workers but typically only one or two will be in flight at a time (one per epic that's just reached DONE)
+- After each worker sends its completion message, send `SendMessage(to=worker, message={"type": "shutdown_request", ...})` to actually terminate it. A plain-text "you are released" message does NOT remove the worker from the team panel -- only `shutdown_request` -> `shutdown_response approve=true` does. `TaskStop` doesn't work either. Track every spawned worker in `spawned_workers` and remove on confirmed shutdown.
 - **Own the team lifecycle end-to-end** -- `TeamCreate` in Step 4, `shutdown_request` per worker on completion, `TeamDelete` in Step 9. Step 9 runs after every outcome (success / partial / timeout / deadlock). Never leave a team or its agents alive after the skill returns.
 - Track per-story cycle counts independently -- one stuck story doesn't drain the budget for others
 - Forward ProductOwner's questions / approval requests to the User -- never answer or approve on their behalf
-- Always invoke status flips through `_tools/update_story_status.py`; never edit story YAMLs directly
+- Always invoke status flips through `_tools/update_story_status.py`; never edit story YAMLs directly. **The YAML is the event log.** Re-read it after every worker completion -- don't trust the message body alone, since the worker may report something that disagrees with what they actually wrote.
 - Trust the Tester's two-gate verdict for DONE -- it runs **Gate A** (per-story tests pass, including no build/compile/dex errors) AND **Gate B** (`verify_ac_map.py` passes for the AC implementation map sidecar the Developer wrote at `STORY-N.implementation.md`). Don't override either gate. When a story comes back to `IN_DEV` because Gate A or Gate B failed, forward the failure details to the Developer in the next cycle's task message.
-- Workers report ONE of three outcomes via the handshake's `[ACK]` payload: `DONE` (success), `IN_DEV` / back-to-previous (recoverable failure, next cycle handles it), or `BLOCKED` (unrecoverable -- requires user action). The handshake fires in ALL THREE cases. If a worker goes silent without a handshake, that's a bug -- escalate the worker via shutdown_request and mark its story BLOCKED with reason `silent_worker`.
+- **EpicVerifier is the third gate, scoped wider than per-story.** It runs only after every story in its epic is `DONE`. Trust its verdict the same way you trust the Tester's. On `FAILED`, it has already re-opened the specific stories that need fixing -- the next scan will pick them up at IN_DEV. On `VERIFIED`, it has written the verification artifact AND flipped the epic YAML to VERIFIED; this is what unblocks any downstream epics. Verifier failures count against the same `max_cycles` budget tracked in `verify_cycle_count[EPIC-N]`.
+- Workers report ONE of three outcomes via their single completion message: `DONE` (success), `FAILED` (recoverable -- the YAML status is the previous one, e.g., Tester flipped TESTING->IN_DEV; next cycle handles it), or `BLOCKED` (unrecoverable -- requires user action). If a worker never sends a starting message or never sends a completion message within the timeouts, treat it as dead -- shutdown_request it and mark its story BLOCKED with reason `ack_timeout` or `work_timeout`.
 - **Dependency satisfaction is mechanical, not judged.** Always call `list_eligible.py --feature <feature_name>` at the top of every scan and trust its bucketing. A story's deps are satisfied **only** when every dep's `status == "DONE"`. `TESTING` doesn't count. `IN_DEV` doesn't count. Don't second-guess the script. The script returning STORY-2 in `blocked_on_deps` means STORY-2 cannot be spawned this scan, regardless of how close its deps look to being done.
 - Token recording is **automatic via discovery**: call `discover_and_record.py --feature <feature_name>` at exactly two trigger points -- once after PO approval (Step 5d), and once at the top of every scheduling scan (Step 6b). Don't try to record per-worker yourself; discovery walks the Claude Code transcripts directory and records anything missing. If discovery fails, log and continue -- never block the workflow on telemetry.
 
 **DON'T:**
 - Don't spawn an Orchestrator agent -- you ARE the orchestrator
+- Don't pollute the shared task list with downstream-phase work. `TaskCreate`/`TaskUpdate` entries are visible to every spawned teammate (PO, TestCreator, Developer, Tester, EpicVerifier) via their TaskList view, and an entry like "Phase 2: spawn workers" or "EpicVerifier: verify EPIC-1" looks to a teammate like a task being assigned to them. If you must use TaskCreate for your own orchestrator notes, scope entries to the current phase only and delete them before moving on. Agents are instructed to treat the task list as informational, but the safest path is to not put confusing entries there in the first place. **The YAMLs are the state machine -- the task list is not.**
 - Don't keep workers alive between stories -- spawn fresh per story so you can use natural shutdown for rate-limiting
 - Don't run a Tester worker with `Test scope: full regression` from this skill -- full regression is for `/sage-dev-test` and the inline `/sage-tester --full`. The parallel scheduler relies on per-story scoping for safe concurrency.
 - Don't preflight project-specific things (test commands, servers) -- that's each worker's job per its `.sage/` instructions
@@ -504,13 +567,16 @@ Full protocol: `HANDBOOK.md` -> "Message Delivery Handshake Protocol".
 
 ## References
 
-- `HANDBOOK.md` -- Full protocol (handshake, ACK, escalation, Monitor tool)
+- `HANDBOOK.md` -- Full protocol (completion reporting model, escalation, Monitor tool)
 - `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable Skill/Team Lead patterns
 - `sage-config.SCHEMA.md` -- Config field reference (including `max_parallel_workers`, `global_timeout_seconds`)
 - `_tools/update_story_status.py` -- Atomic, locked story-status updater used by all workers
 - `_tools/verify_ac_map.py` -- Verifies a story's AC implementation map sidecar (Developer's mandatory artifact); Tester calls this as Gate B before flipping to DONE
 - `_tools/discover_and_record.py` -- **Token-tracking entry point for this skill.** Walks `~/.claude/projects/<slug>/<session>/subagents/`, finds every worker transcript, records any not yet in the JSON store. Idempotent. Call once after PO approval and once per scheduling scan -- it handles everything else.
-- `_tools/list_eligible.py` -- **Scheduling entry point for this skill.** Reads every story YAML, returns JSON with which stories are eligible for which role (TestCreator/Developer/Tester) and which are blocked on unmet deps. Call once at the top of every scheduling scan. Mechanical; treats `TESTING != DONE` correctly.
+- `_tools/list_eligible.py` -- **Scheduling entry point for this skill.** Reads every story YAML (and every epic YAML if present), returns JSON with which stories are eligible for which role (TestCreator/Developer/Tester), which epics are ready to verify, and which stories are blocked on unmet deps (story-level OR epic-level). Call once at the top of every scheduling scan. Mechanical; treats `TESTING != DONE` and `DONE != VERIFIED` correctly.
+- `_tools/verify_epic.py` -- **Precondition gate the EpicVerifier runs first.** Reads stories in scope and re-runs `verify_ac_map.py` for each. Surfaces non-DONE stories and stale AC maps. Doesn't run tests -- the verifier role does that.
+- `_tools/update_epic_status.py` -- Atomic, locked epic-status updater. EpicVerifier calls this to flip `DONE -> VERIFIED` (or BLOCKED on unrecoverable cases).
+- `_tools/rollup_status.py` -- Read-only renderer; produces a human-readable per-epic / per-story rollup view of feature progress from the authoritative YAMLs. Call once at the end of Phase 2 (Step 7) with `--write` to refresh `progress.md`.
 - `_tools/extract_token_usage.py` -- Used internally by `record_worker_usage.py` to parse one transcript's usage. Don't call from this skill.
 - `_tools/record_worker_usage.py` -- Used internally by `discover_and_record.py` to record one worker. Also called directly from this skill in Step 7 to record the orchestrator's own main-session diff.
 - `examples/chatbot/.sage/` -- Reference per-agent instruction configs
