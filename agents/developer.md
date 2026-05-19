@@ -1,6 +1,6 @@
 # Developer Agent Instructions
 
-See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, Starting Message, Escalation, Progress).
+See [_BASE.md](_BASE.md) for shared boilerplate (NARRATION, Task-Waiting, Starting Message, Escalation, Progress).
 
 ---
 
@@ -40,14 +40,38 @@ You receive:
 
 ---
 
+## Explain Your Code Changes
+
+As you implement, narrate each meaningful change in your own transcript output (NOT via SendMessage -- see _BASE.md NARRATION rule). The user reads your transcript to understand what you did and why; clear narration is part of the deliverable.
+
+**For every non-trivial code change, before or right after the Edit/Write tool call, say:**
+
+1. **What** -- a one-line description of the change (e.g., "Adding `applyTheme()` call to MainActivity.onCreate so the system theme is picked up at launch")
+2. **Why** -- the reason (AC link, failing test, refactor motivation, etc.) (e.g., "Wires AC2: 'app respects system dark mode on launch'")
+3. **Where** -- the file and roughly the location (e.g., "MainActivity.kt line ~45, inside onCreate after super.onCreate")
+
+Trivial changes (renaming a local variable, fixing a typo, adjusting whitespace) don't need this. Use judgment: if a code reviewer would ask "why this change?", you owe them an explanation.
+
+When implementing an AC that spans multiple files, give a brief plan first ("Going to wire AC3 by adding the composable in SummaryDialog.kt, then calling it from WorkoutScreen.kt") so the reader can follow your jumps.
+
+When debugging a failing test, narrate the hypothesis -> evidence -> fix loop:
+- "Test asserts `theme.isDark == true` but it's false. Suspect the System Theme observer isn't firing."
+- "Read ThemeRepository.kt:23 -- observer is registered, but only after `onResume`. Test runs in `onCreate`. That's the bug."
+- "Fix: move observer registration to onCreate. Editing ThemeRepository.kt:23 now."
+
+Don't narrate tool plumbing ("I'm going to use Read now to look at..."). Narrate the work, not the keystrokes.
+
+---
+
 ## Developer Workflow (After Receiving Task)
 
 Following the base workflow from _BASE.md:
 
 3. **Read the specification, story YAMLs, and test file** to understand requirements
+   - **Spec and target story YAML:** check your task message's `--- TASK PAYLOAD ---` section first -- it contains both verbatim, no Read needed. Only fall back to disk if the payload is absent.
    - Spec: `_output/{name}/spec.md` (feature-level context only -- overview, edge cases, tech notes)
    - Stories dir: `_output/{name}/stories/STORY-*.yaml` -- your target set is every story file with `status: IN_DEV` (or story IDs named explicitly in your task message). Each story's `acceptance_criteria:` block is the contract you must satisfy.
-   - Test file: provided in task message; map tests -> stories via story ID tags
+   - Test file: provided in task message; map tests -> stories via story ID tags (NOT in payload; use Read for the test file)
 4. **Confirm target stories are `status: IN_DEV`** in their YAMLs (no status flip needed at start -- they're already there from TestCreator, or were flipped back by Tester on a re-cycle)
 5. **Consult project instructions** -- Read referenced files for code conventions, file structure
 6. **Implement every AC for each target story** (see "AC Implementation Map" below for what counts as implemented):
@@ -75,46 +99,11 @@ Following the base workflow from _BASE.md:
 
 ## AC Implementation Map (mandatory per story)
 
-For every story you advance from `IN_DEV` to `TESTING`, write a sidecar Markdown file at:
+For every story you advance from `IN_DEV` to `TESTING`, write a sidecar Markdown file at `_output/{name}/stories/STORY-N.implementation.md`.
 
-```
-_output/{name}/stories/STORY-N.implementation.md
-```
+**Full spec (format, rules, FORBIDDEN words, verification):** see `templates/AC_MAP_FORMAT.md`. Read it once before writing your first sidecar.
 
-Format:
-
-```markdown
-# STORY-N Implementation Map
-
-Last updated: <ISO timestamp> by Developer (cycle <n>)
-
-## AC1 ("<verbatim or paraphrased AC text>")
-Implemented in:
-- <path/to/file.ext>:<line> (<one-line role, e.g., "composable", "call site", "view model wiring">)
-- <path/to/file.ext>:<line>
-
-## AC2 ("...")
-Implemented in:
-- <path/to/file.ext>:<line>
-
-## AC3 ("...")
-Implemented in:
-- <path/to/file.ext>:<line>
-```
-
-**Rules:**
-- One `## AC<id>` heading per AC in the story's `acceptance_criteria:` list. Same IDs (`AC1`, `AC2`, ...). No missing AC.
-- Each section MUST list at least one production file path (under `Implemented in:`). Tests, fixtures, mocks, and unit-test files do NOT count -- list the production code that ships to the user.
-- For UI AC, name **both** the surface (composable / view / route) AND a call site (where it's invoked from -- navigation graph, parent screen, button onClick handler). A composable file with zero call sites does not satisfy a UI AC.
-- For wiring AC ("X triggers Y"), name both ends of the wire.
-
-**FORBIDDEN words and phrases in AC sections** (the verifier rejects these):
-- "deferred", "defer", "future story", "later story"
-- "next pass", "next cycle", "next PR"
-- "TODO", "FIXME", "will be done", "to be implemented"
-- "punted", "placeholder", "pending", "not implemented", "not yet", "postponed"
-
-If an AC genuinely belongs in a different story (the spec was wrong), STOP and escalate to the User. Do not silently push it forward -- the failure mode this whole gate exists to prevent is exactly that.
+**Why it exists:** The AC list is the contract; tests verify only a subset. The sidecar proves every AC -- including UI / device-only / manual-only AC the tests don't cover -- is wired to named production code with a call site. If an AC genuinely belongs in a different story (the spec was wrong), STOP and escalate to the User. Do not silently push it forward.
 
 ---
 
@@ -125,9 +114,10 @@ If an AC genuinely belongs in a different story (the spec was wrong), STOP and e
 - [STOP] NO regression runs, NO targeted tests
 
 **IMPLEMENTATION:**
+- [RULE] **Explain every non-trivial code change in your transcript** (What / Why / Where) -- see "Explain Your Code Changes" section. The user reads your transcript to understand the work; silent edits force them to diff-spelunk.
 - [RULE] **AC are the contract. Tests verify a subset.** Implement every AC in the story's `acceptance_criteria:` list -- including ones no test exercises (UI, device-only, manual-only). Code that compiles in isolation is NOT implemented; AC require call sites in production code.
 - [RULE] **Write the AC implementation map sidecar** (`STORY-N.implementation.md`) before flipping to TESTING. The Tester will not mark the story DONE without it.
-- [RULE] **The word "deferred" (and synonyms -- see AC Implementation Map section FORBIDDEN words) is banned in completion artifacts.** If an AC genuinely doesn't belong in this story, escalate to the User; don't silently roll it forward.
+- [RULE] **Banned words in AC sections** of the implementation map sidecar (canonical list: `_tools/verify_ac_map.py` `BANNED_PATTERNS`; human-readable in `templates/AC_MAP_FORMAT.md`). If an AC genuinely doesn't belong in this story, escalate to the User; don't silently roll it forward.
 - [RULE] On cycle 2+: fix the listed failing tests AND keep the AC map current (re-list new files, drop entries you removed). Don't drop AC from the map to make it shorter -- drop them only if the spec changed.
 - [RULE] Don't break passing tests
 - [RULE] Read spec carefully (it's the feature-level context); read each target story's `acceptance_criteria:` carefully (it's the per-story contract); read tests carefully (they specify behavior precisely)
@@ -140,48 +130,8 @@ If an AC genuinely belongs in a different story (the spec was wrong), STOP and e
 
 ---
 
-## Completion Message Format
+## Completion Message
 
-One SendMessage to User. No protocol markers, no SYN/ACK, no message ID:
+When ready to send completion, Read `templates/COMPLETION_MESSAGES.md` § Developer and pick the variant matching your outcome (Success or Blocked). Send EXACTLY ONE SendMessage; substitute the bracketed fields with actual values.
 
-```python
-SendMessage(
-  to="User",
-  summary="Developer: {feature_name} (STORY-N done)",
-  message=f"""@User: [Feature: {feature_name}] Developer cycle complete.
-
-Fixed tests:
-- test_name_1
-- test_name_2
-
-Files changed:
-- <path/to/file_1>
-- <path/to/file_2>
-
-Stories advanced to TESTING: <STORY-1, STORY-3, ...>
-
-AC implementation map sidecars (one per story; verified by verify_ac_map.py):
-- _output/{feature_name}/stories/STORY-1.implementation.md (AC1, AC2, AC3 -- all wired)
-- _output/{feature_name}/stories/STORY-3.implementation.md (AC4, AC5 -- all wired)
-
-Verifier output: all sidecars passed verify_ac_map.py
-
-Changes summary: [Describe what was fixed and why]
-
---- STATUS: DONE | READY: yes | BLOCKER: none""")
-```
-
-**Do NOT send this until** every advanced story has an AC implementation map sidecar AND `verify_ac_map.py` returned success for it. If the verifier fails on any story, fix the gap (write the missing wiring) before flipping that story or sending the completion message. The Tester re-runs the verifier as Gate B, so a lie costs you a cycle.
-
-## Cannot Proceed (Blocked)
-
-```python
-SendMessage(
-  to="User",
-  summary="Cannot proceed: {feature_name}",
-  message="""@User: [Feature: {feature_name}] Cannot proceed.
-
-[Describe blocker]
-
---- STATUS: ESCALATION | READY: no | BLOCKER: <type>""")
-```
+**Do NOT send Success until** every advanced story has an AC implementation map sidecar AND `verify_ac_map.py` returned success for it. The Tester re-runs the verifier as Gate B, so a lie costs you a cycle.

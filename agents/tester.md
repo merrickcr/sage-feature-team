@@ -1,6 +1,6 @@
 # Tester Agent Instructions
 
-See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, Starting Message, Escalation, Progress).
+See [_BASE.md](_BASE.md) for shared boilerplate (NARRATION, Task-Waiting, Starting Message, Escalation, Progress).
 
 ---
 
@@ -17,7 +17,7 @@ You DON'T: Analyze failures, fix code, edit tests.
 
 Following the base workflow, the Tester-specific steps are:
 
-3. **Read all story YAMLs** at `_output/{name}/stories/STORY-*.yaml`
+3. **Read target story YAMLs** -- check your task message's `--- TASK PAYLOAD ---` section first (it contains the target story YAML verbatim). Only fall back to disk if the payload is absent: `_output/{name}/stories/STORY-*.yaml`.
    - **Test scope** (from your task message) determines your target set:
      - `story STORY-N` -- single story; only run tests tagged for `STORY-N`
      - `full regression` -- every story currently at `status: TESTING`; run the full suite
@@ -154,64 +154,8 @@ ScheduleWakeup(
 
 ---
 
-## Completion Message Format (MUST SEND when tests finish)
+## Completion Message (MUST SEND when tests finish)
 
-One SendMessage to User. No protocol markers, no SYN/ACK, no message ID. Two variants:
+When ready to send completion, Read `templates/COMPLETION_MESSAGES.md` § Tester and pick the variant matching your outcome (Tests Passed, Tests Failed, or Blocked). Send EXACTLY ONE SendMessage; substitute the bracketed fields with actual values.
 
-**Tests Passed:**
-
-```python
-SendMessage(
-  to="User",
-  summary="Tests passed: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Tests passed.
-
-Results: All {total_tests} tests passed in {elapsed_time} seconds.
-
-{json.dumps({"test_results": {"passed": total_tests, "failed": 0, "failures": []}})}
-
-Stories advanced to DONE: <STORY-1, STORY-3, ...>     # passed BOTH gates (tests + AC map)
-Stories sent back to IN_DEV (AC map gate failed): <STORY-IDs or "none">
-  For each: paste the verify_ac_map.py JSON verbatim so Developer knows exactly what to fix
-Stories still at TESTING (not in this run's target set): <STORY-N or "none">
-
---- STATUS: DONE | READY: yes | BLOCKER: none""")
-```
-
-**Tests Failed (or build broke -- Gate A failure):**
-
-```python
-SendMessage(
-  to="User",
-  summary="Tests failed: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Tests failed.
-
-Results: {passed_count} passed, {failed_count} failed in {elapsed_time} seconds.
-
-{json.dumps({"test_results": {"passed": passed_count, "failed": failed_count, "failures": failures}})}
-
-Stories advanced to DONE (passed BOTH gates: tests + AC map): <STORY-IDs or "none">
-Stories sent back to IN_DEV (had failing tests): <STORY-IDs or "none">
-Stories sent back to IN_DEV (AC map gate failed despite passing tests): <STORY-IDs or "none">
-  For each: paste the verify_ac_map.py JSON verbatim so Developer knows exactly what to fix
-
---- STATUS: FAILED | READY: no | BLOCKER: none""")
-```
-
-**Blocked (rare -- infrastructure unrecoverable, tagging convention undefined, etc.):**
-
-```python
-SendMessage(
-  to="User",
-  summary="BLOCKED: {feature_name} STORY-N",
-  message=f"""@User: [Feature: {feature_name}] BLOCKED on STORY-N.
-
-STATUS: BLOCKED | BLOCKER: <category>
-
-Why: <one paragraph>
-What user must decide: <specific question>
-Current state: <relevant files / config / output excerpt>
-Recommended action: <if applicable>
-
---- STATUS: BLOCKED | READY: no | BLOCKER: <category>""")
-```
+Include the failure details verbatim (failing test names, build error excerpts, `verify_ac_map.py` JSON for Gate B failures) -- the orchestrator forwards these to the Developer in the next cycle's task message.

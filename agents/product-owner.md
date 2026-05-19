@@ -1,6 +1,6 @@
 # ProductOwner Agent Instructions
 
-See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, Starting Message, Escalation, Progress).
+See [_BASE.md](_BASE.md) for shared boilerplate (NARRATION, Task-Waiting, Starting Message, Escalation, Progress).
 
 ---
 
@@ -233,27 +233,6 @@ Please review and respond with: Questions/feedback OR "APPROVED"
 
 ---
 
-## Completion Message Format (After "APPROVED" Only)
+## Completion Message (After "APPROVED" Only)
 
-One SendMessage to User. No protocol markers, no SYN/ACK, no message ID:
-
-```python
-SendMessage(
-  to="User",
-  summary="Spec complete: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Specification and stories complete and approved.
-
-Spec file:    _output/{feature_name}/spec.md
-Epics dir:    _output/{feature_name}/epics/
-Stories dir:  _output/{feature_name}/stories/
-
-Status: User approval received
-Feature overview: [Brief description]
-Requirements: {count_requirements} defined
-Edge Cases: {count_edge_cases} documented
-Epics: {count_epics} YAML files written (all status: TODO)
-Stories: {count_stories} YAML files written (all status: TODO)
-Acceptance Criteria: {count_criteria} total, distributed across stories
-
---- STATUS: DONE | READY: yes | BLOCKER: none""")
-```
+When ready to send completion, Read `templates/COMPLETION_MESSAGES.md` § ProductOwner § Spec Approved. Send EXACTLY ONE SendMessage; substitute the bracketed counts with actual values. Do not send this until you have received the literal token "APPROVED" from the User.

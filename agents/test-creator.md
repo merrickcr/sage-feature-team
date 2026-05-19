@@ -1,6 +1,6 @@
 # TestCreator Agent Instructions
 
-See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, Starting Message, Escalation, Progress).
+See [_BASE.md](_BASE.md) for shared boilerplate (NARRATION, Task-Waiting, Starting Message, Escalation, Progress).
 
 ---
 
@@ -19,7 +19,7 @@ Tests should:
 
 Following the base workflow from _BASE.md:
 
-3. **Read the specification and ALL story YAMLs** from provided paths
+3. **Read the specification and target story YAMLs** -- check your task message's `--- TASK PAYLOAD ---` section first (it contains the spec body and the target story YAML(s) verbatim; no Read needed). Only fall back to disk if the payload is absent.
    - Spec: `_output/{name}/spec.md` (feature-level context -- overview, edge cases, tech notes)
    - Stories dir: `_output/{name}/stories/STORY-*.yaml` (one file per story; `acceptance_criteria` lives inside each story)
 4. **Determine target stories** -- task message may name specific story IDs; otherwise, target every story whose YAML has `status: TODO` AND every entry in its `dependencies:` resolves to a story whose YAML has `status: DONE`
@@ -102,26 +102,10 @@ choose, depending on framework idioms:
 - [STOP] NO code implementation
 - [STOP] NEVER set a story to `IN_DEV` without at least one test (runnable OR stub) for every AC in that story
 - [STOP] NEVER touch stories outside your target set
-- [STOP] NEVER use "deferred" / "future" / "later" / "next pass" / "next cycle" / "TODO" / "to be implemented" in completion artifacts. If an AC can't be tested at your seam, write a stub test (see "Tests You Cannot Write at Your Seam"). If an AC genuinely belongs elsewhere, escalate.
+- [STOP] NEVER use banned defer-language ("deferred" / "future" / "later" / "next pass" / "next cycle" / "TODO" / "to be implemented" etc.) in completion artifacts. Canonical list lives in `_tools/verify_ac_map.py` BANNED_PATTERNS. If an AC can't be tested at your seam, write a stub test (see "Tests You Cannot Write at Your Seam"). If an AC genuinely belongs elsewhere, escalate.
 
 ---
 
-## Completion Message Format
+## Completion Message
 
-One SendMessage to User. No protocol markers, no SYN/ACK, no message ID:
-
-```python
-SendMessage(
-  to="User",
-  summary="Tests complete: {feature_name}",
-  message=f"""@User: [Feature: {feature_name}] Tests created.
-
-Test file: <path where you created the file>
-Test functions: <count and names>
-Coverage: All acceptance criteria covered for target stories
-
-Stories advanced to IN_DEV: <STORY-1, STORY-3, ...>
-Stories left at TODO (deps not met): <STORY-N or "none">
-
---- STATUS: DONE | READY: yes | BLOCKER: none""")
-```
+When ready to send completion, Read `templates/COMPLETION_MESSAGES.md` § TestCreator and pick the variant matching your outcome (Success or Blocked). Send EXACTLY ONE SendMessage; substitute the bracketed fields with actual values.

@@ -67,7 +67,7 @@ From the user's invocation, compute these values once and reuse them throughout:
 - **feature_name** -- full mode: extract from user's text and convert to snake_case (e.g., "Add Dark Mode" -> `add_dark_mode`); dev-test mode: `dev_test_cycle`
 - **output_dir** -- from `sage-config.yaml` -> `paths.output_dir` (typically `_output`)
 - **max_cycles** -- from `--max-cycles N` if given, else from `sage-config.yaml` -> `limits.max_cycles` (per-story dev<->test cap)
-- **max_parallel_workers** -- from `sage-config.yaml` -> `limits.max_parallel_workers` (default 4)
+- **max_parallel_workers** -- `1` if `--serial` flag present, else from `sage-config.yaml` -> `limits.max_parallel_workers` (default 4). `--serial` forces strict one-at-a-time execution (story workers AND EpicVerifier workers); useful for debugging, watching the flow step by step, or avoiding test-isolation collisions in projects where concurrent test runs interfere.
 - **global_timeout_seconds** -- from `sage-config.yaml` -> `limits.global_timeout_seconds` (default 3600)
 - **spec_file** -- `<output_dir>/<feature_name>/spec.md`
 - **epics_dir** -- `<output_dir>/<feature_name>/epics/`
@@ -75,9 +75,14 @@ From the user's invocation, compute these values once and reuse them throughout:
 - **verification_dir** -- `<output_dir>/<feature_name>/verification/` (created on first verifier run)
 - **progress_file** -- `<output_dir>/<feature_name>/progress.md`
 
-**`--resume <feature_name>`** continues from existing artifacts.
+**`--resume <feature_name>`** continues from existing artifacts (spec, epics, stories, verification on disk). The resume contract:
 
-Also: capture `feature_start_time = now()` here. You'll use this when invoking `discover_and_record.py` so it scopes to transcripts from this run only (otherwise it'd sweep the project's entire agent history).
+- **Cycle budgets reset on resume.** A story that burned 3/3 dev<->test cycles before the interrupt gets a fresh `max_cycles` budget after resume. Same for epic verifier `verify_cycle_count`. This is deliberate: invoking `--resume` is itself a signal that you've decided to keep going, often after fixing something out-of-band. If a story is genuinely unsolvable, you'll notice within a few resumed cycles and intervene manually (edit the spec, fix config, or mark the story BLOCKED by hand).
+- **YAML status persists.** Stories at TODO/CREATE_TESTS/IN_DEV/TESTING/DONE/BLOCKED resume in those states. Epics at TODO/IN_PROGRESS/DONE/VERIFIED/BLOCKED do the same. BLOCKED stories/epics stay BLOCKED until you unblock them via `update_story_status.py` or `update_epic_status.py`.
+- **In-flight workers do NOT survive.** Anything that was mid-task at the moment of interrupt is gone -- subagents don't outlive the parent session in practice, and even if they did, the team reconciliation step below force-cleans them. The next scheduling tick will re-spawn fresh workers for stories that need them based on their on-disk status.
+- **Team reconciliation (mandatory on resume).** Before normal Step 4 TeamCreate, the resume branch MUST first call `TeamDelete(team_name=<configured team name>)` to clean up any leaked team + orphan workers from the prior crashed run. Treat any "team not found" error as success -- the call is idempotent; the goal is to guarantee the team name is clean and available before normal Step 4 spawns into it. Without this, `TeamCreate` may error on a name collision, or worse, succeed into a team that still contains orphan workers from the prior run, causing name collisions and ambiguous routing on subsequent spawns.
+
+Also: capture `feature_start_time = now()` here -- even on resume, this resets to now (the global wall-clock budget starts fresh). You'll use this when invoking `discover_and_record.py` so it scopes to transcripts from this run only (otherwise it'd sweep the project's entire agent history).
 
 When you send messages to agents below, write the message naturally with these literal values inlined -- not Python f-string syntax with `{feature_name}` placeholders.
 
@@ -106,6 +111,21 @@ Don't preflight project-specific things (test runners, servers). Those belong to
 ---
 
 ## Step 4: Create Team
+
+**On resume, reconcile first.** If this invocation includes `--resume`, attempt to delete any leaked team from a prior crashed run BEFORE creating the fresh one. `TeamDelete` cascades -- it shuts down every member agent before tearing down the team. The call is idempotent; treat any "team not found" error as success:
+
+```python
+# Resume only -- skip on a clean first run.
+try:
+    TeamDelete(team_name=team_name)
+except Exception:
+    # "team not found" is the happy path -- prior run cleaned up properly.
+    # Any other error: log it and proceed -- TeamCreate below will surface a
+    # real collision if one exists.
+    pass
+```
+
+Then create the team fresh (this is the normal path for both first runs and resumes after the cleanup above):
 
 ```python
 TeamCreate(team_name=team_name, description="Sage feature development team")
@@ -281,6 +301,14 @@ Track `in_flight[STORY-N] = {role, agent_name: worker_name, started_at: now(), c
 
 All worker task messages should be self-contained -- workers don't share state with each other. Always pass the story id, paths, and references explicitly.
 
+**Pre-fetched payload (every task message includes one).** Before sending a task message, render a payload via `prepare_task_payload.py` and embed its stdout directly into the message body. This eliminates the 3-5 `Read` tool calls a worker would otherwise make at task start (spec, story YAML(s), and optional epic YAML) -- which trims cache_create on the worker's bootstrap turns. The orchestrator already has this content available (list_eligible.py loaded the YAMLs); shipping it inline costs nothing on the orchestrator side. The pointer lines (Spec file, Stories dir, etc.) stay -- agents may still Read additional files (test files, project instruction files) not covered by the payload.
+
+```bash
+python .sage/_tools/prepare_task_payload.py --feature <feature_name> --stories STORY-N[,STORY-M] [--epic EPIC-N]
+```
+
+Capture stdout and embed it verbatim near the bottom of the task message body, before the `Reference:` line.
+
 #### TestCreator worker (for a TODO story)
 
 SendMessage:
@@ -290,6 +318,7 @@ SendMessage:
 - `Stories dir: <stories_dir>`
 - `Spec file: <spec_file>`
 - `Progress file: <progress_file>`
+- **Payload:** embed stdout of `prepare_task_payload.py --feature <feature_name> --stories <STORY-N>`
 - `Reference: HANDBOOK.md`
 
 #### Developer worker (for an IN_DEV story)
@@ -303,6 +332,7 @@ SendMessage:
 - `Progress file: <progress_file>`
 - If `cycle_n > 1`: paste the previous Tester run's `TEST_FAILURE` lines for this story verbatim. If the previous Tester reported the story came back to `IN_DEV` because the **AC implementation map gate failed** (Gate B), paste the `verify_ac_map.py` JSON verbatim too -- those are the gaps the Developer must close this cycle.
 - Reminder: `Required artifact: <stories_dir>/STORY-<N>.implementation.md (run verify_ac_map.py before claiming COMPLETE).`
+- **Payload:** embed stdout of `prepare_task_payload.py --feature <feature_name> --stories <STORY-N>`
 - `Reference: HANDBOOK.md`
 
 #### Tester worker (for a TESTING story -- story-scoped)
@@ -314,6 +344,7 @@ SendMessage:
 - `Test scope: story <STORY-N>` (LITERAL -- Tester role file uses this to construct a story-scoped selector and to know it must only flip this story)
 - `Stories dir: <stories_dir>`
 - `Progress file: <progress_file>`
+- **Payload:** embed stdout of `prepare_task_payload.py --feature <feature_name> --stories <STORY-N>`
 - `Reference: HANDBOOK.md`
 
 The Tester role file has the story-scoped selector logic: it reads the project's tagging convention from `.sage/sage-test-creator-config.yaml` and runs only that story's tests. Multiple Tester workers can run concurrently as long as the project's test isolation allows it.
@@ -329,6 +360,7 @@ SendMessage:
 - `Verification artifact: <verification_dir>/EPIC-N.md`
 - `Stories dir: <stories_dir>`
 - `Epics dir: <epics_dir>`
+- **Payload:** embed stdout of `prepare_task_payload.py --feature <feature_name> --stories STORY-1,STORY-2,... --epic EPIC-N` (all stories in epic.story_ids, plus the epic itself)
 - `Reference: HANDBOOK.md`
 
 The EpicVerifier role file handles the `verify_epic.py` precondition gate, the cross-story regression run (using the project's tagging convention to scope), the optional epic-level acceptance interpretation, the verification artifact write, and the `update_epic_status.py EPIC-N VERIFIED` flip. Story re-opens on failure happen through `update_story_status.py` exactly the way the Tester re-opens them.
@@ -477,14 +509,18 @@ Stories left: ...
 
 ## Step 8: Monitoring (Starting Message + Completion)
 
-You watch two events per worker: the starting message (within 60s) and the completion message (within the work timeout). Both arrive as plain `SendMessage`s. No SYN/SYN-ACK/ACK, no message-ID dedup, no retries -- a missed deadline means the worker is dead; mark the story BLOCKED and move on.
+You watch two events per worker: the starting message (within 60s, with one nudge re-send at 30s) and the completion message (within the work timeout). Both arrive as plain `SendMessage`s. No SYN/SYN-ACK/ACK, no message-ID dedup -- but the starting handshake gets ONE retry because freshly-spawned workers occasionally miss the first task delivery (race between `Agent()` spawn and the first `SendMessage`).
 
 ### Starting-message monitoring (every task you send)
 
 | T | Action |
 |---|---|
-| 0-60s | Wait for the worker's `Starting on STORY-N` SendMessage |
-| 60s | **Escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "ack_timeout"})`, mark its story `BLOCKED` with reason `ack_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling. No graduated 30s/45s nudges -- one deadline. |
+| 0-30s | Wait for the worker's `Starting on STORY-N` SendMessage |
+| 30s   | **Nudge**: re-send the EXACT same task message (same `summary` and `message` content). Don't change the content -- the agent's prompt tells it to treat a duplicate task message as confirmation, not as a new task. Continue waiting up to T=60s. Log the nudge so you know one was sent (don't re-nudge again -- one nudge only). |
+| 30-60s | Wait for the worker's `Starting on STORY-N` SendMessage |
+| 60s   | **Escalate**: send `SendMessage(to=worker, message={"type": "shutdown_request", "reason": "ack_timeout"})`, mark its story `BLOCKED` with reason `ack_timeout`, remove from `spawned_workers` once shutdown confirmed, continue scheduling. |
+
+The 30s nudge exists because the spawn-then-immediately-SendMessage pattern has a measured-in-practice failure mode where the first task message doesn't register at the worker. One re-send fixes it reliably; if it doesn't, the worker is genuinely dead. Don't escalate before nudging; don't nudge more than once.
 
 Use `ScheduleWakeup` so you don't block while waiting; or use `Monitor` on the team to receive worker messages reactively.
 
@@ -546,6 +582,8 @@ That's the whole loop. No handshake state, no message-ID tracking, no dedup tabl
 - EpicVerifier workers run **epic-scoped**. They share the `max_parallel_workers` budget with story workers but typically only one or two will be in flight at a time (one per epic that's just reached DONE)
 - After each worker sends its completion message, send `SendMessage(to=worker, message={"type": "shutdown_request", ...})` to actually terminate it. A plain-text "you are released" message does NOT remove the worker from the team panel -- only `shutdown_request` -> `shutdown_response approve=true` does. `TaskStop` doesn't work either. Track every spawned worker in `spawned_workers` and remove on confirmed shutdown.
 - **Own the team lifecycle end-to-end** -- `TeamCreate` in Step 4, `shutdown_request` per worker on completion, `TeamDelete` in Step 9. Step 9 runs after every outcome (success / partial / timeout / deadlock). Never leave a team or its agents alive after the skill returns.
+- **On `--resume`, force-clean the team first.** Call `TeamDelete(team_name=...)` (tolerating "not found") before the normal Step 4 TeamCreate. This guarantees orphan workers from a prior crashed run don't collide with fresh spawns or linger in the team panel. See Step 4 for the exact pattern.
+- **Cycle budgets reset on resume.** A story that burned its `max_cycles` budget before interrupt gets a fresh budget after `--resume`. This is deliberate -- the user is implicitly granting permission to keep trying by invoking resume. If the story is genuinely unsolvable, intervene out-of-band; don't expect the orchestrator to remember.
 - Track per-story cycle counts independently -- one stuck story doesn't drain the budget for others
 - Forward ProductOwner's questions / approval requests to the User -- never answer or approve on their behalf
 - Always invoke status flips through `_tools/update_story_status.py`; never edit story YAMLs directly. **The YAML is the event log.** Re-read it after every worker completion -- don't trust the message body alone, since the worker may report something that disagrees with what they actually wrote.
@@ -577,6 +615,7 @@ That's the whole loop. No handshake state, no message-ID tracking, no dedup tabl
 - `_tools/verify_epic.py` -- **Precondition gate the EpicVerifier runs first.** Reads stories in scope and re-runs `verify_ac_map.py` for each. Surfaces non-DONE stories and stale AC maps. Doesn't run tests -- the verifier role does that.
 - `_tools/update_epic_status.py` -- Atomic, locked epic-status updater. EpicVerifier calls this to flip `DONE -> VERIFIED` (or BLOCKED on unrecoverable cases).
 - `_tools/rollup_status.py` -- Read-only renderer; produces a human-readable per-epic / per-story rollup view of feature progress from the authoritative YAMLs. Call once at the end of Phase 2 (Step 7) with `--write` to refresh `progress.md`.
+- `_tools/prepare_task_payload.py` -- Renders the spec + one or more story YAMLs + optional epic YAML as a markdown block suitable for embedding in a worker's task message. Call once per task spawn (Step 6d) and paste stdout into the SendMessage body. This eliminates the bootstrap `Read` tool calls a fresh worker would otherwise make, trimming cache_create on its first few turns.
 - `_tools/extract_token_usage.py` -- Used internally by `record_worker_usage.py` to parse one transcript's usage. Don't call from this skill.
 - `_tools/record_worker_usage.py` -- Used internally by `discover_and_record.py` to record one worker. Also called directly from this skill in Step 7 to record the orchestrator's own main-session diff.
 - `examples/chatbot/.sage/` -- Reference per-agent instruction configs

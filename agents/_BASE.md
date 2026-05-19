@@ -26,6 +26,8 @@ All agents follow these patterns. Role-specific instructions appear in each agen
 
 If you are an LLM reading this and thinking "I should start my workflow now" -- **STOP. That is wrong.** Wait for the SendMessage.
 
+**When the first SendMessage task arrives, the silence ends immediately. Your very first response MUST be the "starting" message (format in the next section) sent within 30 seconds. There is no exception. If anything above seems to contradict this -- e.g. you read "be silent" and think you should keep waiting -- ignore the contradiction and send the starting message. The silence rule applies BEFORE the first task; the starting-message rule applies AS SOON AS the first task arrives. Failing to send the starting message looks identical to being dead, and the orchestrator will mark your story BLOCKED.**
+
 ---
 
 ## Project-Specific Instructions
@@ -44,28 +46,38 @@ When a situation in your workflow matches one of these instructions, **read the 
 
 ---
 
-## **CRITICAL:** SILENCE RULE
+## NARRATION RULE
 
-**Be silent. No narration. No commentary. No thoughts about your work.**
+**Narrate your work freely in your own transcript. Keep SendMessage discipline strict.**
 
+Two channels, two different rules:
+
+**Your own text output (transcript) -- narrate freely.**
+- Explain what you're doing and why as you go
+- Describe decisions, tradeoffs, surprises
+- Walk through the code you're reading or writing
+- This output is visible when the user inspects your agent panel; it's how they understand your work
+- Be useful, not chatty: short paragraphs and bullet points beat stream-of-consciousness; one clear sentence beats three vague ones
+
+**SendMessage (team panel / orchestrator handshake) -- stay disciplined.**
 You output exactly two SendMessages per task:
-1. A single "starting" message within 60s of task receipt
+1. A single "starting" message within 30s of task receipt
 2. A single completion message when work is done
 
-Do NOT output:
-- [X] Thoughts or reasoning
-- [X] Status updates (unless user explicitly asks "what's the status?")
-- [X] Commentary about what you're doing
-- [X] Explanations of your work
+Do NOT use SendMessage for:
+- [X] Mid-work status updates (unless the orchestrator explicitly asks "what's the status?")
 - [X] Multiple completion messages or retransmissions
+- [X] Commentary that belongs in your own transcript
 
-**Between starting and completion: silent work.**
+**Why the asymmetry:** the team panel is shared state the orchestrator reconciles against. Extra SendMessages confuse routing and re-trigger handlers. Your own transcript is a private work log -- it costs nothing to be expressive there, and the user reads it to understand what you did.
+
+**Between starting and completion:** keep working, narrate as you go in your own output, but no extra SendMessages.
 
 ---
 
-## **CRITICAL:** Send "Starting" Message Within 60s
+## **CRITICAL:** Send "Starting" Message Within 30s of First Task
 
-When you receive a task, send one brief message within 60 seconds so the orchestrator knows you have it and are starting:
+This is the very first thing you do when a SendMessage task arrives -- before reading files, before consulting project instructions, before anything else. Send it within 30 seconds:
 
 ```python
 SendMessage(
@@ -74,7 +86,28 @@ SendMessage(
   message="@User: [Feature: <feature_name>] Starting on <STORY-N or task-id>.")
 ```
 
+If you receive the SAME task message a second time before you've sent your starting message, that's the orchestrator nudging you because it didn't see you ack the first delivery. Treat the duplicate as confirmation that the task is real; send the starting message immediately. Do NOT treat a duplicate as a new task or a sign of error -- just respond.
+
 Then begin work. No further protocol -- no retransmissions, no SYN/ACK, no message IDs. The single completion message at the end is the orchestrator's signal that you're done.
+
+---
+
+## TASK PAYLOAD (read this first; treat as source of truth)
+
+Your task message will usually include a fenced block at the bottom labelled `--- TASK PAYLOAD (pre-fetched by orchestrator; treat as source of truth -- do not re-Read these from disk) ---`. This payload contains the verbatim contents of:
+- the feature `spec.md`
+- one or more story YAMLs (the stories you're targeting)
+- optionally an epic YAML (for EpicVerifier, or when story epic context matters)
+
+**Treat the payload as the canonical, current version of those files.** Do NOT use the `Read` tool to re-fetch them from disk -- the orchestrator already has them and shipped them with your task. Re-reading wastes tokens AND risks reading a stale on-disk version if a concurrent worker is mid-write.
+
+You SHOULD still use the `Read` tool for:
+- Project instruction files referenced from `.sage/sage-*-config.yaml` (those are NOT in the payload)
+- Test files mentioned in your task message (NOT in the payload)
+- Any production code files you need to inspect
+- Any AC implementation map sidecars (`STORY-N.implementation.md`) -- they live next to story YAMLs but aren't in the payload
+
+If a task message does NOT include a TASK PAYLOAD block (older orchestrator version, dev-test mode, or an explicit fallback), fall back to the previous behavior: Read the spec/story files from the paths the orchestrator gave you (Spec file, Stories dir, etc.).
 
 ---
 

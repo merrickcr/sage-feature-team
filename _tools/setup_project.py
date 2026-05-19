@@ -19,6 +19,7 @@ What it copies (always overwritten on re-run):
   _tools/discover_and_record.py        -> <project>/.sage/_tools/discover_and_record.py
   _tools/list_eligible.py              -> <project>/.sage/_tools/list_eligible.py
   _tools/rollup_status.py              -> <project>/.sage/_tools/rollup_status.py
+  _tools/prepare_task_payload.py       -> <project>/.sage/_tools/prepare_task_payload.py
   HANDBOOK.md                          -> <project>/.sage/HANDBOOK.md
   sage-config.SCHEMA.md                -> <project>/.sage/sage-config.SCHEMA.md
   templates/                           -> <project>/.sage/templates/
@@ -74,6 +75,7 @@ SAGE_FILES = [
     ("_tools/discover_and_record.py",            "_tools/discover_and_record.py"),
     ("_tools/list_eligible.py",                  "_tools/list_eligible.py"),
     ("_tools/rollup_status.py",                  "_tools/rollup_status.py"),
+    ("_tools/prepare_task_payload.py",           "_tools/prepare_task_payload.py"),
     ("HANDBOOK.md",                              "HANDBOOK.md"),
     ("sage-config.SCHEMA.md",                    "sage-config.SCHEMA.md"),
     ("templates/MESSAGE_TEMPLATE.md",            "templates/MESSAGE_TEMPLATE.md"),
@@ -112,6 +114,7 @@ SKILL_PATH_REWRITES = [
     ("python _tools/discover_and_record.py",                  "python .sage/_tools/discover_and_record.py"),
     ("python _tools/list_eligible.py",                        "python .sage/_tools/list_eligible.py"),
     ("python _tools/rollup_status.py",                        "python .sage/_tools/rollup_status.py"),
+    ("python _tools/prepare_task_payload.py",                 "python .sage/_tools/prepare_task_payload.py"),
     ("`HANDBOOK.md`",                                         "`.sage/HANDBOOK.md`"),
     ("`sage-config.SCHEMA.md`",                               "`.sage/sage-config.SCHEMA.md`"),
     ("`guides/",                                              "`.sage/guides/"),
@@ -132,6 +135,7 @@ SKILL_PATH_REWRITES = [
     ("`_tools/discover_and_record.py`",                       "`.sage/_tools/discover_and_record.py`"),
     ("`_tools/list_eligible.py`",                             "`.sage/_tools/list_eligible.py`"),
     ("`_tools/rollup_status.py`",                             "`.sage/_tools/rollup_status.py`"),
+    ("`_tools/prepare_task_payload.py`",                      "`.sage/_tools/prepare_task_payload.py`"),
     ("`examples/chatbot/.sage/sage-tester-config.yaml`",      "`.sage/sage-tester-config.yaml`"),
     ("`examples/chatbot/.sage/`",                             "`.sage/`"),
 ]

@@ -1,6 +1,6 @@
 # EpicVerifier Agent Instructions
 
-See [_BASE.md](_BASE.md) for shared boilerplate (SILENCE, Task-Waiting, Starting Message, Escalation, Progress).
+See [_BASE.md](_BASE.md) for shared boilerplate (NARRATION, Task-Waiting, Starting Message, Escalation, Progress).
 
 ---
 
@@ -25,6 +25,7 @@ Following the base workflow, the EpicVerifier-specific steps are:
    - `Feature: <feature_name>`
    - `Stories in scope: STORY-1, STORY-2, ...` (precomputed list of story ids -- matches the epic's `story_ids:`)
    - `Verification artifact: <path>` where you must write your report
+   - A `--- TASK PAYLOAD ---` block at the bottom containing the spec, every story YAML in scope, and the epic YAML verbatim. Use it as your source of truth; do NOT re-Read those files. Run `verify_epic.py` and the test runner against actual disk state as normal -- those are dynamic checks, not file reads.
 
 4. **Run preconditions check** -- mechanical gate that confirms every story is DONE and every AC implementation map still verifies:
    ```bash
@@ -118,63 +119,8 @@ Following the base workflow, the EpicVerifier-specific steps are:
 
 ---
 
-## Completion Message Format
+## Completion Message
 
-One SendMessage to User. No protocol markers, no SYN/ACK, no message ID. Three variants:
+When ready to send completion, Read `templates/COMPLETION_MESSAGES.md` § EpicVerifier and pick the variant matching your outcome (Verified, Failed, or Blocked). Send EXACTLY ONE SendMessage; substitute the bracketed fields with actual values.
 
-**Verified (success):**
-
-```python
-SendMessage(
-  to="User",
-  summary="Verified: {feature_name} EPIC-N",
-  message=f"""@User: [Feature: {feature_name}] [EPIC-N] Verification passed.
-
-Status: VERIFIED
-Stories in scope: STORY-1, STORY-2, ...
-Tests run: {total_tests} (all passed) in {elapsed_time}s
-Selector: {selector}
-Epic acceptance: {satisfied | n/a}
-
-Artifact: _output/{feature_name}/verification/EPIC-N.md
-Epic YAML: status flipped DONE -> VERIFIED
-
---- STATUS: DONE | READY: yes | BLOCKER: none""")
-```
-
-**Failed (cross-story regression or AC map regression):**
-
-```python
-SendMessage(
-  to="User",
-  summary="Verification failed: {feature_name} EPIC-N",
-  message=f"""@User: [Feature: {feature_name}] [EPIC-N] Verification FAILED -- stories re-opened.
-
-Status: FAILED
-Stories in scope: STORY-1, STORY-2, ...
-Re-opened stories: STORY-N (cross_story_regression), STORY-M (ac_map_regression), ...
-For each re-opened story: paste the failure details / verify_ac_map JSON verbatim so the Developer knows exactly what to fix.
-
-Artifact: not written (verification incomplete)
-Epic YAML: NOT flipped to VERIFIED (preconditions failed)
-
---- STATUS: FAILED | READY: no | BLOCKER: none""")
-```
-
-**Blocked (epic acceptance gap with no owning story, missing tagging convention, etc.):**
-
-```python
-SendMessage(
-  to="User",
-  summary="BLOCKED: {feature_name} EPIC-N",
-  message=f"""@User: [Feature: {feature_name}] [EPIC-N] Verification BLOCKED.
-
-STATUS: BLOCKED | BLOCKER: <category>
-
-Why: <one paragraph>
-What user must decide: <specific question>
-Current state: <relevant files / config / output excerpt>
-Recommended action: <if applicable>
-
---- STATUS: BLOCKED | READY: no | BLOCKER: <category>""")
-```
+For Failed: include the per-story failure details verbatim so the Developer's next cycle has the gap details. For Verified: the verification artifact MUST already be written and the epic YAML MUST already be flipped before you send this.
