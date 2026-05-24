@@ -6,6 +6,48 @@ Lead. Project-specific knowledge lives in each project's `.sage/` directory.
 
 ---
 
+## Prerequisites
+
+- **Python 3.10 or later** (older versions are not supported)
+- **PyYAML** (required) and **ruamel.yaml** (optional but strongly recommended)
+
+## First-time setup (one-time per machine)
+
+After cloning this repo:
+
+```bash
+cd sage-feature-team
+
+# 1. Install Python dependencies
+pip install -r requirements.txt
+
+# 2. Bootstrap the /sage-install skill into your Claude Code user-level skills directory
+python _tools/install_skill.py
+```
+
+That's it. `/sage-install` is now available in Claude Code from any directory.
+
+What each step did:
+- Step 1: installs pyyaml + ruamel.yaml into your Python env. One-time per Python env; covers every sage-using project on this machine.
+- Step 2: copies `.claude/skills/sage-install/SKILL.md` into `~/.claude/skills/sage-install/SKILL.md`, with the source-repo path substituted in. Re-run this anytime you `git pull` an update to sage-feature-team (it's idempotent).
+
+## Installing sage into a project
+
+In Claude Code, `cd` to your target project's root and invoke:
+
+```
+/sage-install
+```
+
+This wraps `_tools/setup_project.py` and scaffolds `.sage/`, `.claude/skills/`, and `sage-config.yaml` into the project. The installer preflights deps and Python version with friendly error messages if anything's missing. After it completes, edit `.sage/sage-<role>-config.yaml` with your project-specific instructions, then run `/sage-feature-team "feature description"`.
+
+## Diagnostic notes
+
+- The `setup_project.py` preflight fails fast with a clear message if PyYAML is missing or Python is too old. If only `ruamel.yaml` is missing it warns -- functionality is unaffected, but story / epic YAML edits will lose comments and may reflow field order on every status flip.
+- **Virtualenv caveat:** Sage tools run with whatever Python is on PATH at workflow time. The `pip install` above is one-time-per-Python-env. If a target project uses a venv, install the deps in that venv too. The installer copies `requirements.txt` into each installed project's `.sage/` directory, so once a project is installed you can `pip install -r .sage/requirements.txt` in any env (venv or global) without needing the source sage-feature-team repo nearby.
+
+---
+
 ## Core Idea
 
 Each agent has **one fixed job** and **one generic instruction file**:

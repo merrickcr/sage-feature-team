@@ -2,12 +2,26 @@
 """
 Installer for Sage Feature Team into a project.
 
+Requirements (checked at startup -- preflight will hard-fail with a clear
+message if anything is missing):
+  - Python 3.10 or later
+  - PyYAML (required)
+  - ruamel.yaml (optional but recommended; preserves YAML comments / field
+    order on status flips)
+
+Install dependencies before running:
+  pip install -r requirements.txt
+
 Run from the source sage-feature-team checkout. Installs everything a project
 needs into its `<project>/.sage/` directory plus `<project>/.claude/skills/`.
 After install, the project is self-contained -- no dependency on the source
 checkout.
 
 What it copies (always overwritten on re-run):
+  requirements.txt                     -> <project>/.sage/requirements.txt
+                                         (so the installed project is self-contained
+                                         on the dep side too -- `pip install -r .sage/requirements.txt`
+                                         from the project root works without needing the source repo)
   agents/                              -> <project>/.sage/agents/   (5 roles + _BASE)
   _tools/load_agents.py                -> <project>/.sage/_tools/load_agents.py
   _tools/update_story_status.py        -> <project>/.sage/_tools/update_story_status.py
@@ -59,6 +73,7 @@ from pathlib import Path
 # Source paths (relative to sage-feature-team root) that are copied verbatim
 # into <project>/.sage/. Tuples: (source, dest_under_sage).
 SAGE_FILES = [
+    ("requirements.txt",                         "requirements.txt"),
     ("agents/_BASE.md",                          "agents/_BASE.md"),
     ("agents/product-owner.md",                  "agents/product-owner.md"),
     ("agents/test-creator.md",                   "agents/test-creator.md"),
@@ -347,7 +362,14 @@ def verify_install(project_root):
     except subprocess.TimeoutExpired:
         return False, "loader timed out (>15s)"
     if result.returncode != 0:
-        return False, f"loader failed (exit {result.returncode}): {result.stderr.strip() or result.stdout.strip()}"
+        err = result.stderr.strip() or result.stdout.strip()
+        # Friendlier hint if the subprocess died on a missing yaml import --
+        # shouldn't happen since preflight catches it, but covers cases like
+        # an installed project with a different python or a stale venv.
+        if "No module named 'yaml'" in err or "No module named yaml" in err:
+            err += "\n        Hint: PyYAML is missing in the installed project's Python env."
+            err += "\n              Run: pip install -r requirements.txt (in the project's env)"
+        return False, f"loader failed (exit {result.returncode}): {err}"
     try:
         data = json.loads(result.stdout)
     except json.JSONDecodeError as e:
@@ -356,6 +378,49 @@ def verify_install(project_root):
         return False, f"loader returned success=false: {data.get('error')}"
     agent_count = len(data.get("agents", {}))
     return True, f"loaded {agent_count} agents in mode={data.get('mode')}"
+
+
+# ---------------------------------------------------------------------------
+# Preflight (Python version + dependencies)
+# ---------------------------------------------------------------------------
+
+MIN_PYTHON = (3, 10)
+
+
+def preflight():
+    """Verify Python version and dependencies before doing any work.
+
+    Hard-fails on missing python version or missing PyYAML. Soft-warns on
+    missing ruamel.yaml (functionality unaffected; only diff-quality of
+    rewritten YAMLs degrades).
+    """
+    if sys.version_info < MIN_PYTHON:
+        actual = ".".join(str(v) for v in sys.version_info[:3])
+        required = ".".join(str(v) for v in MIN_PYTHON)
+        print(f"[ERROR] Python {required} or later is required (you have {actual}).")
+        print(f"        Install a newer Python and re-run.")
+        return False
+
+    try:
+        import yaml  # noqa: F401
+    except ImportError:
+        print("[ERROR] PyYAML is required but not installed.")
+        print("        Run: pip install -r requirements.txt")
+        print("        (or: pip install pyyaml ruamel.yaml)")
+        return False
+
+    try:
+        import ruamel.yaml  # noqa: F401
+    except ImportError:
+        print("[WARN] ruamel.yaml is not installed.")
+        print("       Story / epic YAMLs will be rewritten in canonical PyYAML form on")
+        print("       every status flip -- comments will be dropped, field order may")
+        print("       reflow. Functionality is unaffected; this is purely a")
+        print("       diff-quality issue when you review YAML edits.")
+        print("       Recommended: pip install ruamel.yaml")
+        print()
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -368,6 +433,9 @@ def main():
     parser.add_argument("--name", help="Project name (used in team names)", default=None)
     parser.add_argument("--yes", "-y", action="store_true", help="Skip confirmation prompt")
     args = parser.parse_args()
+
+    if not preflight():
+        return 1
 
     source_root = Path(__file__).parent.parent.resolve()
 
@@ -471,6 +539,16 @@ def main():
     print(f"       /sage-test-creator [STORY-N]         -- single agent: write tests for a story")
     print(f"       /sage-developer    [STORY-N]         -- single agent: implement code for a story")
     print(f"       /sage-tester       [STORY-N]         -- single agent: validate a story's tests")
+    print()
+    print(f"Dependency note:")
+    print(f"  This project now has {sage_dir.name}/requirements.txt. Sage tools require pyyaml")
+    print(f"  (and recommend ruamel.yaml). If your Python env already has them (e.g., installed")
+    print(f"  globally during sage-feature-team setup), no further action is needed. If this project")
+    print(f"  uses a virtualenv -- or if you're handing the project off to CI or a collaborator")
+    print(f"  with a different env -- install them in THAT env with:")
+    print(f"       pip install -r {sage_dir.name}/requirements.txt")
+    print(f"  Sage tools run with whatever python is on PATH at workflow time, so the relevant")
+    print(f"  env is whichever one /sage-feature-team will end up invoking python from.")
     return 0
 
 
