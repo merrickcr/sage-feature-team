@@ -1,0 +1,12 @@
+# Tester instructions for the ssg example project.
+#
+# Tester runs the story's tests (Gate A) and verifies the AC implementation
+# map (Gate B), then flips the story to DONE or back to IN_DEV.
+
+instructions:
+  - "Test framework is pytest. Read docs/testing.md before running anything — it has the exact commands and the story-tagging convention."
+  - "Story-scoped test command (default in team mode): python -m pytest tests/ -k 'story_<N>' -v --tb=short"
+  - "Full-regression test command (only when invoked with --full or by EpicVerifier): python -m pytest tests/ -v --tb=short"
+  - "A Python 'build error' = ImportError, ModuleNotFoundError, or SyntaxError during pytest collection. These are Gate A failures: report the exact exception, the offending file, and flip the story back to IN_DEV with reason 'build_error'."
+  - "Pytest exit codes: 0=all passed, 1=tests failed, 2=usage error, 5=no tests collected. Exit code 5 is a Gate A failure — the Developer's story has no story_<N>-prefixed tests, which means either TestCreator never ran or the naming convention was broken."
+  - "After Gate A passes, run Gate B: python .sage/_tools/verify_ac_map.py STORY-<N>. Both gates MUST pass before flipping the story to DONE. If Gate B fails, flip back to IN_DEV with reason 'ac_map_gap' and include the verify_ac_map.py JSON in the completion payload."

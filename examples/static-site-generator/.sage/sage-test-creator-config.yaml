@@ -1,0 +1,13 @@
+# TestCreator instructions for the ssg example project.
+#
+# TestCreator writes the failing tests that capture a story's AC before the
+# Developer writes any code. Tests are the executable contract.
+
+instructions:
+  - "Test framework is pytest. Read docs/testing.md before writing any test file."
+  - "Test files go in tests/ at the project root, named test_<area>.py (e.g. test_parser.py, test_renderer.py, test_builder.py, test_e2e.py)."
+  - "Every test function MUST be named test_story_<N>_<short_description> so the Tester can filter the story's tests with pytest -k 'story_<N>'. Example: test_story_2_renders_title_in_template."
+  - "Use fixtures from tests/fixtures/ for any non-trivial content. Add new fixtures there rather than inlining sample markdown in the test body."
+  - "Assert on OBSERVABLE output — returned HTML strings, file contents under dist/, stdout/stderr from the CLI, exit codes. Never assert on call counts or internal implementation details."
+  - "If an AC cannot be tested at your seam yet (e.g. the CLI orchestration story hasn't been built), write the test with pytest.mark.xfail(strict=True) and a clear reason, then note it in your completion message so the Developer knows to flip xfail off when implementing."
+  - "Don't write tests for behavior outside the story's AC list. If you notice missing AC, escalate to User rather than inventing coverage."

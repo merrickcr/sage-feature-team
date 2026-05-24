@@ -1,0 +1,13 @@
+# Developer instructions for the ssg example project.
+#
+# Developer makes the story's failing tests pass while keeping all other tests
+# green, then writes the AC implementation map sidecar before flipping to TESTING.
+
+instructions:
+  - "Read docs/conventions.md before writing any code. Module layout, error style, and the 'libraries don't print' rule are non-negotiable."
+  - "Production code lives in src/ssg/. The suggested module split is parser.py / renderer.py / builder.py / __main__.py — deviate only if a story makes a clearly stronger case (and note why in your completion message)."
+  - "Run the project's tests with: python -m pytest tests/ -v. Run only this story's tests with: python -m pytest tests/ -k 'story_<N>' -v."
+  - "Do NOT modify test files unless the test has an actual bug (e.g. wrong expected value, typo). The Developer's job is to make tests pass, not to change what they check. If you believe a test is wrong, escalate."
+  - "Honor the PRD's Non-goals strictly. If a failing test seems to demand functionality outside PRD scope, escalate to User rather than implement it — the test or the spec is wrong, not the boundary."
+  - "Every story REQUIRES an AC implementation map sidecar at <stories_dir>/STORY-<N>.implementation.md. Map each AC ID to the specific file(s) and function(s) that implement it. Run python .sage/_tools/verify_ac_map.py STORY-<N> and confirm it passes BEFORE flipping the story to TESTING."
+  - "For ad-hoc smoke checks (e.g. 'does the CLI actually run?'), follow docs/build_run.md — don't invent your own ad-hoc commands."

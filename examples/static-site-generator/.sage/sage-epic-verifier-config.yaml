@@ -1,0 +1,13 @@
+# EpicVerifier instructions for the ssg example project.
+#
+# Runs once per epic, after every story in the epic reaches DONE. Performs
+# cross-story regression and epic-level acceptance checks the per-story
+# Tester gates cannot cover. On success, flips the epic to VERIFIED.
+
+instructions:
+  - "Read docs/testing.md before running regression — it documents the test layout, the e2e fixture, and the idempotency check."
+  - "Cross-story regression command: python -m pytest tests/ -v --tb=short. This runs every story's tests across the epic (and every prior verified epic), not just one story's slice."
+  - "Epic-level acceptance: run the end-to-end test in tests/test_e2e.py against tests/fixtures/sample_site/, asserting the produced dist/ matches tests/fixtures/expected_dist/ byte-for-byte."
+  - "Idempotency check (PRD requirement, owned by no single story): build twice against the same fixture, diff -r the two dist/ trees. Any diff = Gate failure. See docs/build_run.md for the exact command sequence."
+  - "On regression failure: the failing test's name prefix (test_story_<N>_...) tells you which story owns the broken behavior. Re-open THAT specific story via python .sage/_tools/update_story_status.py STORY-<N> IN_DEV --reason 'cross_story_regression' and include the failure details in your completion message so the Developer gets them in the next cycle."
+  - "On VERIFIED: write the verification artifact at _output/<feature>/verification/EPIC-<N>.md summarizing (1) regression test count + pass count, (2) idempotency check result, (3) any epic-level acceptance criteria checked beyond per-story AC, (4) anything noteworthy a reviewer would want to know."

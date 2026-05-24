@@ -6,6 +6,55 @@ Lead. Project-specific knowledge lives in each project's `.sage/` directory.
 
 ---
 
+## Quickstart (5 minutes)
+
+From a fresh clone to a live agent team drafting a spec for you.
+
+**1. Install** (one-time per machine):
+
+```bash
+pip install -r requirements.txt
+python _tools/install_skill.py
+```
+
+**2. Kick off a feature.** This repo ships with a ready-to-run example config
+(`sage-config.yaml`, pointed at the bundled `examples/chatbot`). From the repo
+root, in Claude Code:
+
+```
+/sage-feature-team "Add a /help command that lists available commands"
+```
+
+A team spins up and the **ProductOwner** starts drafting the spec. Watch the
+team panel populate -- and once you approve the spec, the parallel
+**TestCreator / Developer / Tester** workers join it, one per story:
+
+![Sage team panel: ProductOwner plus parallel per-story workers](docs/img/quickstart-team-panel.png)
+
+**3. Approve the spec.** When the ProductOwner reports the spec is ready, reply
+`APPROVED`. A spec, at least one epic, and one YAML file per story land under
+`_output/`:
+
+```
+_output/add_help_command/
++-- spec.md
++-- epics/EPIC-1.yaml
++-- stories/STORY-1.yaml, STORY-2.yaml, ...
+```
+
+![_output tree: spec.md, epics/EPIC-1.yaml, stories/STORY-1.yaml ...](docs/img/quickstart-output-files.png)
+
+That's the on-ramp. From here the team cycles each story through
+tests -> code -> validation in parallel until every epic verifies.
+
+> **Note:** the example config targets a sample app, so the spec-and-stories
+> step above runs anywhere. To point these same agents at *your own* codebase
+> and run the full build, see [Installing sage into a project](#installing-sage-into-a-project)
+> below. Just want the spec without spawning a team? Run `/sage-po "..."` -- the
+> ProductOwner inline, no team panel.
+
+---
+
 ## Prerequisites
 
 - **Python 3.10 or later** (older versions are not supported)
