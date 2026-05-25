@@ -1,8 +1,18 @@
 # Sage Feature Team
 
 A multi-agent feature-development workflow for Claude Code. Generic agents
-(ProductOwner, TestCreator, Developer, Tester) coordinated by a Skill/Team
-Lead. Project-specific knowledge lives in each project's `.sage/` directory.
+(ProductOwner, TestCreator, Developer, Tester, EpicVerifier) coordinated by a
+skill acting as Team Lead. Project-specific knowledge lives in each project's
+`.sage/` directory.
+
+> **What this is, and what it isn't.** This is a pattern built against Claude
+> Code's primitives -- `Agent`, `Task`, `SendMessage`, `TeamCreate`,
+> `shutdown_request`, `Monitor`. The *ideas* port well to other agentic
+> environments: ephemeral per-story workers, YAML as the event log instead of
+> the message body, three verification gates instead of one, mechanical
+> scheduling instead of LLM-judged routing. The *code* does not. If you're not
+> using Claude Code, treat this repo as a reference design, not a drop-in
+> framework.
 
 ---
 
@@ -18,8 +28,8 @@ python _tools/install_skill.py
 ```
 
 **2. Kick off a feature.** This repo ships with a ready-to-run example config
-(`sage-config.yaml`, pointed at the bundled `examples/static-site-generator`). From the repo
-root, in Claude Code:
+(`sage-config.yaml`, pointed at the bundled `examples/static-site-generator/`).
+From the repo root, in Claude Code:
 
 ```
 /sage-feature-team "Add a /help command that lists available commands"
@@ -47,175 +57,113 @@ _output/add_help_command/
 That's the on-ramp. From here the team cycles each story through
 tests -> code -> validation in parallel until every epic verifies.
 
-> **Note:** the example config targets a sample app, so the spec-and-stories
-> step above runs anywhere. To point these same agents at *your own* codebase
-> and run the full build, see [Installing sage into a project](#installing-sage-into-a-project)
-> below. Just want the spec without spawning a team? Run `/sage-po "..."` -- the
-> ProductOwner inline, no team panel.
-
 ---
 
-## Prerequisites
+## Use sage with your own project
 
-- **Python 3.10 or later** (older versions are not supported)
-- **PyYAML** (required) and **ruamel.yaml** (optional but strongly recommended)
-
-## First-time setup (one-time per machine)
-
-After cloning this repo:
-
-```bash
-cd sage-feature-team
-
-# 1. Install Python dependencies
-pip install -r requirements.txt
-
-# 2. Bootstrap the /sage-install skill into your Claude Code user-level skills directory
-python _tools/install_skill.py
-```
-
-That's it. `/sage-install` is now available in Claude Code from any directory.
-
-What each step did:
-- Step 1: installs pyyaml + ruamel.yaml into your Python env. One-time per Python env; covers every sage-using project on this machine.
-- Step 2: copies `.claude/skills/sage-install/SKILL.md` into `~/.claude/skills/sage-install/SKILL.md`, with the source-repo path substituted in. Re-run this anytime you `git pull` an update to sage-feature-team (it's idempotent).
-
-## Installing sage into a project
-
-In Claude Code, `cd` to your target project's root and invoke:
+The Quickstart above runs against the bundled `examples/static-site-generator/`.
+To point these same agents at *your own* codebase, `cd` to that project's
+repo root in Claude Code and run:
 
 ```
 /sage-install
 ```
 
-This wraps `_tools/setup_project.py` and scaffolds `.sage/`, `.claude/skills/`, and `sage-config.yaml` into the project. The installer preflights deps and Python version with friendly error messages if anything's missing. After it completes, edit `.sage/sage-<role>-config.yaml` with your project-specific instructions, then run `/sage-feature-team "feature description"`.
+`/sage-install` scaffolds `.sage/` (the per-agent config files, the agent
+role files, the helper scripts, the handbook, the templates) and
+`.claude/skills/` (the six sage skills, with paths rewritten to point at the
+project's `.sage/`) into your project. After it completes, edit each
+`.sage/sage-<role>-config.yaml` to give the agents your project's HOW
+(testing conventions, file layout, code-style docs to consult), then run
+`/sage-feature-team "feature description"` from your project root.
 
-## Diagnostic notes
+For prereqs, manual install path, diagnostic notes, and the full
+what-gets-installed-where tree, see **[docs/INSTALL.md](docs/INSTALL.md)**.
 
-- The `setup_project.py` preflight fails fast with a clear message if PyYAML is missing or Python is too old. If only `ruamel.yaml` is missing it warns -- functionality is unaffected, but story / epic YAML edits will lose comments and may reflow field order on every status flip.
-- **Virtualenv caveat:** Sage tools run with whatever Python is on PATH at workflow time. The `pip install` above is one-time-per-Python-env. If a target project uses a venv, install the deps in that venv too. The installer copies `requirements.txt` into each installed project's `.sage/` directory, so once a project is installed you can `pip install -r .sage/requirements.txt` in any env (venv or global) without needing the source sage-feature-team repo nearby.
+> Just want the spec without spawning a team? Try `/sage-po "..."` -- the
+> ProductOwner inline, no team panel. The single-agent skills section below
+> covers this.
 
 ---
 
-## Core Idea
+## Try a single agent first
 
-Each agent has **one fixed job** and **one generic instruction file**:
+Before spinning up the full team, run one agent inline. The single-agent
+skills act as the agent directly in the main conversation -- no team panel,
+no orchestrator overhead, no async coordination. It's the fastest way to
+get a feel for what each role does.
 
-| Agent | Job | File |
-|---|---|---|
-| ProductOwner | Write a feature spec | `agents/product-owner.md` |
-| TestCreator | Write tests for the spec | `agents/test-creator.md` |
-| Developer | Make tests pass without breaking others | `agents/developer.md` |
-| Tester | Run tests, report pass/fail | `agents/tester.md` |
-
-Each project tells these agents **how** to do their job for that project via a
-`.sage/sage-<agent>-config.yaml` file containing a list of plain-English
-instructions. The instructions point at project markdown docs that the agent
-reads at runtime.
+From the repo root, in Claude Code:
 
 ```
-sage-feature-team/                       <- this repo (the system)
-+-- agents/
-|   +-- _BASE.md                         <- shared protocol + {PROJECT_INSTRUCTIONS} hook
-|   +-- product-owner.md                 <- generic job
-|   +-- test-creator.md                  <- generic job
-|   +-- developer.md                     <- generic job
-|   \-- tester.md                        <- generic job
-+-- _tools/
-|   +-- load_agents.py                   <- assembles agent prompts
-|   \-- setup_project.py                 <- scaffolds .sage/ in a new project
-+-- HANDBOOK.md                          <- protocol details (completion reporting, escalation, etc.)
-+-- sage-config.yaml                     <- team/path config (points at the example below)
-\-- examples/static-site-generator/      <- self-contained reference example
-
-<your-project>/                          <- e.g. ~/StudioProjects/Breadcrumbs
-+-- sage-config.yaml                     <- created by setup wizard
-\-- .sage/
-    +-- sage-product-owner-config.yaml   <- project's instructions for ProductOwner
-    +-- sage-test-creator-config.yaml    <- project's instructions for TestCreator
-    +-- sage-developer-config.yaml       <- project's instructions for Developer
-    \-- sage-tester-config.yaml          <- project's instructions for Tester
+/sage-po "Add a /help command that lists available commands"
 ```
 
----
+The ProductOwner drafts a spec and per-story YAMLs inline; the output lands
+under `_output/<feature_name>/`. From there you can read what it produced,
+pick the work back up later with `/sage-test-creator`, `/sage-developer`, or
+`/sage-tester`, or hand it to the full team with `/sage-feature-team` once
+you've approved the spec.
 
-## How a Run Works
-
-1. User invokes `/sage-feature-team "Add dark mode"`
-2. Skill reads `sage-config.yaml` and calls `_tools/load_agents.py`
-3. Loader:
-   - Reads `agents/_BASE.md` + each role file
-   - Finds the project's `.sage/` directory (defaults to `<project_root>/.sage/`)
-   - Reads `.sage/sage-<agent>-config.yaml` for each agent
-   - Substitutes the instructions list into `{PROJECT_INSTRUCTIONS}` in `_BASE.md`
-4. Skill creates a team and spawns the four agents with their fully-rendered prompts
-5. Each agent reads its referenced project files (test guides, code conventions, etc.) using the Read tool when relevant
-6. Skill routes work through ProductOwner -> TestCreator -> Developer <-> Tester until tests pass or max cycles hit
-
-Two modes:
-- **full** -- all four agents (spec -> tests -> code -> validation)
-- **dev-test-only** -- Developer + Tester (tests already exist; fix and verify)
+The same pattern works for any role -- `/sage-developer` will pick up the
+next `IN_DEV` story; `/sage-tester` will run the next `TESTING` one. See
+[Inline single-agent skills](#inline-single-agent-skills) below for the full
+per-skill reference.
 
 ---
 
-## Setup for a New Project
+## How it flows
 
-```bash
-cd ~/StudioProjects/Breadcrumbs
-python ~/claudeProjects/sage-feature-team/_tools/setup_project.py
+```mermaid
+flowchart TD
+    A[User: feature request] --> B(ProductOwner)
+    B --> C[spec.md<br/>epics/EPIC-N.yaml<br/>stories/STORY-N.yaml]
+    C --> D{User: APPROVED?}
+    D -->|yes| E[Parallel scheduler<br/>max_parallel_workers]
+
+    E --> F[Story 1 worker]
+    E --> G[Story 2 worker]
+    E --> H[Story N worker]
+
+    F -.->|"TestCreator -> Developer &lt;-&gt; Tester"| F1[Story 1 DONE]
+    G -.-> G1[Story 2 DONE]
+    H -.-> H1[Story N DONE]
+
+    F1 --> I(EpicVerifier)
+    G1 --> I
+    H1 --> I
+
+    I --> J{Gate A: tests pass?<br/>Gate B: AC map verifies?<br/>Gate C: cross-story regression OK?}
+    J -->|yes| K[Epic VERIFIED]
+    J -->|no| L[Reopen failing stories]
+    L --> E
+
+    K --> M{More epics?}
+    M -->|yes| E
+    M -->|no| N[Feature complete]
 ```
 
-The wizard asks for project name + root path, then writes:
-- `sage-config.yaml` (team name, paths)
-- `.sage/sage-product-owner-config.yaml` (skeleton)
-- `.sage/sage-test-creator-config.yaml` (skeleton)
-- `.sage/sage-developer-config.yaml` (skeleton)
-- `.sage/sage-tester-config.yaml` (skeleton)
+Three verification gates run before a feature is complete:
 
-Then edit each `.sage/sage-*-config.yaml` to fill in the `instructions:` list.
-Each instruction is a one-line English statement, ideally pointing at a project
-markdown file:
+- **Gate A** -- per-story tests pass (run by Tester after each Developer cycle).
+- **Gate B** -- the AC implementation map (`verify_ac_map.py`) confirms every
+  acceptance criterion is wired to real code, not just to a passing test.
+- **Gate C** -- the EpicVerifier runs cross-story regression once every story
+  in an epic is `DONE`, then flips the epic to `VERIFIED`. Downstream epics
+  with `depends_on:` only unblock at `VERIFIED`, not `DONE`.
 
-```yaml
-instructions:
-  - "When running tests, follow docs/run_gradle_tests.md."
-  - "Test files go in app/src/test/java/, naming pattern <Feature>Test.kt."
-  - "If a test references the emulator, see docs/start_emulator.md first."
-```
-
-See `examples/static-site-generator/.sage/` for filled-in reference configs.
+If GitHub didn't render the Mermaid above (older clients sometimes don't),
+here's the same diagram as a static image:
+[docs/img/architecture.svg](docs/img/architecture.svg) (or the
+[high-res PNG](docs/img/architecture@2x.png) for sharing).
 
 ---
 
-## Files
+## Inline single-agent skills
 
-| Path | Purpose |
-|---|---|
-| `agents/_BASE.md` | Shared protocol + the `{PROJECT_INSTRUCTIONS}` hook |
-| `agents/<role>.md` | Generic job description per agent |
-| `HANDBOOK.md` | Full protocol details (completion reporting model, escalation, Monitor) |
-| `sage-config.yaml` | This repo's demo team/paths config (points at the static-site-generator example) |
-| `sage-config.SCHEMA.md` | Field reference for `sage-config.yaml` |
-| `_tools/load_agents.py` | Assembles agent prompts; finds `.sage/`; substitutes vars |
-| `_tools/setup_project.py` | Setup wizard for new projects |
-| `_tools/README.md` | Tool-level docs |
-| `templates/MESSAGE_TEMPLATE.md` | Standard SendMessage format |
-| `templates/PROGRESS_TEMPLATE.md` | Progress file template |
-| `guides/ORCHESTRATOR_PATTERNS.md` | Reusable Skill/Team Lead patterns |
-| `examples/static-site-generator/` | Self-contained reference example (`.sage/` + docs + `sage-config.yaml`) |
-| `.claude/skills/sage-feature-team/SKILL.md` | Full team workflow (PO -> TestCreator -> Developer <-> Tester) |
-| `.claude/skills/sage-dev-test/SKILL.md` | Dev/test cycles only (Developer + Tester team) |
-| `.claude/skills/sage-po/SKILL.md` | Single-agent inline: ProductOwner -- create spec + stories |
-| `.claude/skills/sage-test-creator/SKILL.md` | Single-agent inline: TestCreator -- write tests for the next ready story |
-| `.claude/skills/sage-developer/SKILL.md` | Single-agent inline: Developer -- implement code for the next IN_DEV story |
-| `.claude/skills/sage-tester/SKILL.md` | Single-agent inline: Tester -- validate tests for the next TESTING story (or `--full` regression) |
-
----
-
-## Per-Agent Skills (Inline)
-
-In addition to the team-orchestrated skills, each agent can be invoked individually
-inline (no team, no protocol overhead -- the main conversation acts as the agent):
+Reference for the inline skills introduced in
+[Try a single agent first](#try-a-single-agent-first). Each runs the agent
+directly in the main conversation -- no team panel, no orchestrator overhead.
 
 | Skill | Picks up | Override |
 |---|---|---|
@@ -225,17 +173,24 @@ inline (no team, no protocol overhead -- the main conversation acts as the agent
 | `/sage-tester [STORY-N] [--full]` | Next story at `TESTING` (story-scoped tests) | `STORY-N` to target a specific story; `--full` for regression |
 
 All four also accept `--feature <feature_name>` if multiple feature folders
-exist under `_output/`. Otherwise, the feature is auto-detected (single match)
-or the skill asks the user (multiple matches).
+exist under `_output/`. Otherwise the feature is auto-detected (single
+match) or the skill asks the user (multiple matches).
 
 ---
 
-## Adding a New Agent
+## Where to go from here
 
-1. Create `agents/<new-role>.md` (generic job description)
-2. Add an entry to `team.agents.full` (and `dev_test_only` if applicable) in `sage-config.yaml`
-3. Add the agent to `AGENT_SLUGS` in `_tools/load_agents.py` so its config file slug is known
-4. Update the routing logic in `.claude/skills/sage-feature-team/SKILL.md`
-5. Each project then creates `.sage/sage-<new-role>-config.yaml` to give it project-specific guidance
-
-The hook (`{PROJECT_INSTRUCTIONS}`) is in `_BASE.md` -- every agent gets it automatically.
+- **[docs/INSTALL.md](docs/INSTALL.md)** -- install sage into your own
+  project (the bundled example is covered by the Quickstart above).
+  Prerequisites, the `/sage-install` flow, the manual install path, the
+  dependency story, and what to do when something doesn't preflight.
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** -- the design rationale:
+  the generic-WHAT / project-specific-HOW split, the state machine, the
+  three-gate model, the scheduler model, the file reference, and how to
+  add a new agent.
+- **[HANDBOOK.md](HANDBOOK.md)** -- the agent protocol in full: completion
+  reporting, escalation, Monitor usage, timeouts, SendMessage discipline.
+- **[examples/static-site-generator/](examples/static-site-generator/)** --
+  a real end-to-end run: the implementation sage produced plus all run
+  artifacts under `_output/` (spec, epics, stories, verification reports,
+  token telemetry).

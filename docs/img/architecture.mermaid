@@ -1,0 +1,31 @@
+%% Sage Feature Team - architecture flow
+%% Source for docs/img/architecture.svg. Edit this, re-render to SVG with:
+%%   mmdc -i docs/img/architecture.mermaid -o docs/img/architecture.svg
+%% (mmdc = @mermaid-js/mermaid-cli; install with: npm i -g @mermaid-js/mermaid-cli)
+
+flowchart TD
+    A[User: feature request] --> B(ProductOwner)
+    B --> C[spec.md<br/>epics/EPIC-N.yaml<br/>stories/STORY-N.yaml]
+    C --> D{User: APPROVED?}
+    D -->|yes| E[Parallel scheduler<br/>max_parallel_workers]
+
+    E --> F[Story 1 worker]
+    E --> G[Story 2 worker]
+    E --> H[Story N worker]
+
+    F -.->|"TestCreator -> Developer &lt;-&gt; Tester"| F1[Story 1 DONE]
+    G -.-> G1[Story 2 DONE]
+    H -.-> H1[Story N DONE]
+
+    F1 --> I(EpicVerifier)
+    G1 --> I
+    H1 --> I
+
+    I --> J{Gate A: tests pass?<br/>Gate B: AC map verifies?<br/>Gate C: cross-story regression OK?}
+    J -->|yes| K[Epic VERIFIED]
+    J -->|no| L[Reopen failing stories]
+    L --> E
+
+    K --> M{More epics?}
+    M -->|yes| E
+    M -->|no| N[Feature complete]

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 1140"
+     font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"
+     font-size="14" fill="#1f2937">
+  <!-- Sage Feature Team architecture flow.
+       Source: docs/img/architecture.mermaid (re-render with mmdc to regenerate). -->
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#475569"/>
+    </marker>
+    <marker id="arrow-dashed" viewBox="0 0 10 10" refX="9" refY="5"
+            markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <style>
+    .box      { fill: #ffffff; stroke: #334155; stroke-width: 1.5; rx: 8; }
+    .box-rounded { fill: #ffffff; stroke: #334155; stroke-width: 1.5; rx: 22; }
+    .decision { fill: #FEF3C7; stroke: #92400E; stroke-width: 1.5; }
+    .done     { fill: #D1FAE5; stroke: #065F46; stroke-width: 1.5; rx: 8; }
+    .final    { fill: #D1FAE5; stroke: #065F46; stroke-width: 2; rx: 8; }
+    .label    { font-weight: 600; }
+    .mono     { font-family: 'SF Mono', 'Consolas', monospace; font-size: 12px; fill: #475569; }
+    .edge     { stroke: #475569; stroke-width: 1.5; fill: none; }
+    .edge-dashed { stroke: #64748b; stroke-width: 1.5; fill: none; stroke-dasharray: 4 3; }
+    .edge-label  { font-size: 11px; fill: #475569; }
+    .gate-label  { font-size: 11px; fill: #92400E; font-weight: 600; }
+    .title       { font-size: 16px; font-weight: 700; fill: #0f172a; }
+    .subtitle    { font-size: 12px; fill: #64748b; }
+  </style>
+
+  <!-- Title -->
+  <text x="360" y="28" text-anchor="middle" class="title">Sage Feature Team — Feature Flow</text>
+  <text x="360" y="46" text-anchor="middle" class="subtitle">Spec → parallel per-story workers → EpicVerifier → DONE</text>
+
+  <!-- 1. User request -->
+  <rect class="box" x="260" y="70" width="200" height="44"/>
+  <text x="360" y="97" text-anchor="middle" class="label">User: feature request</text>
+  <line class="edge" x1="360" y1="114" x2="360" y2="142" marker-end="url(#arrow)"/>
+
+  <!-- 2. ProductOwner -->
+  <rect class="box-rounded" x="280" y="142" width="160" height="44"/>
+  <text x="360" y="169" text-anchor="middle" class="label">ProductOwner</text>
+  <line class="edge" x1="360" y1="186" x2="360" y2="214" marker-end="url(#arrow)"/>
+
+  <!-- 3. Plan output -->
+  <rect class="box" x="220" y="214" width="280" height="74"/>
+  <text x="360" y="237" text-anchor="middle" class="mono">spec.md</text>
+  <text x="360" y="255" text-anchor="middle" class="mono">epics/EPIC-N.yaml</text>
+  <text x="360" y="273" text-anchor="middle" class="mono">stories/STORY-N.yaml</text>
+  <line class="edge" x1="360" y1="288" x2="360" y2="316" marker-end="url(#arrow)"/>
+
+  <!-- 4. APPROVED? diamond -->
+  <polygon class="decision" points="360,316 470,358 360,400 250,358"/>
+  <text x="360" y="354" text-anchor="middle" class="label">User:</text>
+  <text x="360" y="370" text-anchor="middle" class="label">APPROVED?</text>
+  <text x="395" y="402" class="gate-label">yes</text>
+  <line class="edge" x1="360" y1="400" x2="360" y2="428" marker-end="url(#arrow)"/>
+
+  <!-- 5. Parallel scheduler -->
+  <rect class="box" x="240" y="428" width="240" height="52"/>
+  <text x="360" y="451" text-anchor="middle" class="label">Parallel scheduler</text>
+  <text x="360" y="469" text-anchor="middle" class="mono">max_parallel_workers</text>
+
+  <!-- Fanout lines from scheduler to 3 columns -->
+  <line class="edge" x1="360" y1="480" x2="360" y2="500"/>
+  <line class="edge" x1="130" y1="500" x2="590" y2="500"/>
+  <line class="edge" x1="130" y1="500" x2="130" y2="528" marker-end="url(#arrow)"/>
+  <line class="edge" x1="360" y1="500" x2="360" y2="528" marker-end="url(#arrow)"/>
+  <line class="edge" x1="590" y1="500" x2="590" y2="528" marker-end="url(#arrow)"/>
+
+  <!-- 6. Three story worker boxes -->
+  <rect class="box" x="50"  y="528" width="160" height="44"/>
+  <text x="130" y="555" text-anchor="middle" class="label">Story 1 worker</text>
+
+  <rect class="box" x="280" y="528" width="160" height="44"/>
+  <text x="360" y="555" text-anchor="middle" class="label">Story 2 worker</text>
+
+  <rect class="box" x="510" y="528" width="160" height="44"/>
+  <text x="590" y="555" text-anchor="middle" class="label">Story N worker</text>
+
+  <!-- Arrows from worker boxes to inner cycle boxes -->
+  <line class="edge" x1="130" y1="572" x2="130" y2="592" marker-end="url(#arrow)"/>
+  <line class="edge" x1="360" y1="572" x2="360" y2="592" marker-end="url(#arrow)"/>
+  <line class="edge" x1="590" y1="572" x2="590" y2="592" marker-end="url(#arrow)"/>
+
+  <!-- 7. Per-story workflow boxes (dev<->test loop) -->
+  <rect class="box" x="40"  y="592" width="180" height="72"/>
+  <text x="130" y="615" text-anchor="middle" class="mono">TestCreator</text>
+  <text x="130" y="635" text-anchor="middle" class="mono">  ↓</text>
+  <text x="130" y="653" text-anchor="middle" class="mono">Developer ⇄ Tester</text>
+
+  <rect class="box" x="270" y="592" width="180" height="72"/>
+  <text x="360" y="615" text-anchor="middle" class="mono">TestCreator</text>
+  <text x="360" y="635" text-anchor="middle" class="mono">  ↓</text>
+  <text x="360" y="653" text-anchor="middle" class="mono">Developer ⇄ Tester</text>
+
+  <rect class="box" x="500" y="592" width="180" height="72"/>
+  <text x="590" y="615" text-anchor="middle" class="mono">TestCreator</text>
+  <text x="590" y="635" text-anchor="middle" class="mono">  ↓</text>
+  <text x="590" y="653" text-anchor="middle" class="mono">Developer ⇄ Tester</text>
+
+  <!-- Arrows down to DONE boxes -->
+  <line class="edge" x1="130" y1="664" x2="130" y2="684" marker-end="url(#arrow)"/>
+  <line class="edge" x1="360" y1="664" x2="360" y2="684" marker-end="url(#arrow)"/>
+  <line class="edge" x1="590" y1="664" x2="590" y2="684" marker-end="url(#arrow)"/>
+
+  <!-- 8. DONE boxes per story -->
+  <rect class="done" x="60"  y="684" width="140" height="40"/>
+  <text x="130" y="710" text-anchor="middle" class="label">Story 1 DONE</text>
+
+  <rect class="done" x="290" y="684" width="140" height="40"/>
+  <text x="360" y="710" text-anchor="middle" class="label">Story 2 DONE</text>
+
+  <rect class="done" x="520" y="684" width="140" height="40"/>
+  <text x="590" y="710" text-anchor="middle" class="label">Story N DONE</text>
+
+  <!-- Converge into EpicVerifier -->
+  <line class="edge" x1="130" y1="724" x2="130" y2="754"/>
+  <line class="edge" x1="360" y1="724" x2="360" y2="754"/>
+  <line class="edge" x1="590" y1="724" x2="590" y2="754"/>
+  <line class="edge" x1="130" y1="754" x2="590" y2="754"/>
+  <line class="edge" x1="360" y1="754" x2="360" y2="774" marker-end="url(#arrow)"/>
+
+  <!-- 9. EpicVerifier -->
+  <rect class="box-rounded" x="270" y="774" width="180" height="44"/>
+  <text x="360" y="801" text-anchor="middle" class="label">EpicVerifier</text>
+  <line class="edge" x1="360" y1="818" x2="360" y2="846" marker-end="url(#arrow)"/>
+
+  <!-- 10. Gates A/B/C diamond -->
+  <polygon class="decision" points="360,846 530,920 360,994 190,920"/>
+  <text x="360" y="892" text-anchor="middle" class="gate-label">Gate A: tests pass?</text>
+  <text x="360" y="908" text-anchor="middle" class="gate-label">Gate B: AC map verifies?</text>
+  <text x="360" y="924" text-anchor="middle" class="gate-label">Gate C: cross-story regression OK?</text>
+  <text x="395" y="996" class="gate-label">yes</text>
+
+  <!-- Re-open arrow back to scheduler (failure path) -->
+  <text x="180" y="918" text-anchor="end" class="gate-label">no</text>
+  <path class="edge-dashed" d="M 190 920 L 30 920 L 30 454 L 240 454" marker-end="url(#arrow-dashed)"/>
+  <text x="20" y="690" text-anchor="middle" transform="rotate(-90 20 690)" class="edge-label">reopen failing stories</text>
+
+  <!-- 11. Epic VERIFIED -->
+  <line class="edge" x1="360" y1="994" x2="360" y2="1022" marker-end="url(#arrow)"/>
+  <rect class="done" x="280" y="1022" width="160" height="44"/>
+  <text x="360" y="1049" text-anchor="middle" class="label">Epic VERIFIED</text>
+
+  <!-- 12. Feature complete (terminal, larger emphasis) -->
+  <line class="edge" x1="360" y1="1066" x2="360" y2="1094" marker-end="url(#arrow)"/>
+  <rect class="final" x="250" y="1094" width="220" height="44"/>
+  <text x="360" y="1121" text-anchor="middle" class="label">Feature complete</text>
+</svg>
