@@ -18,7 +18,7 @@ python _tools/install_skill.py
 ```
 
 **2. Kick off a feature.** This repo ships with a ready-to-run example config
-(`sage-config.yaml`, pointed at the bundled `examples/chatbot`). From the repo
+(`sage-config.yaml`, pointed at the bundled `examples/static-site-generator`). From the repo
 root, in Claude Code:
 
 ```
@@ -125,8 +125,8 @@ sage-feature-team/                       <- this repo (the system)
 |   +-- load_agents.py                   <- assembles agent prompts
 |   \-- setup_project.py                 <- scaffolds .sage/ in a new project
 +-- HANDBOOK.md                          <- protocol details (completion reporting, escalation, etc.)
-+-- sage-config.yaml                     <- team/path config (this is for chatbot)
-\-- examples/chatbot/.sage/              <- reference configs
++-- sage-config.yaml                     <- team/path config (points at the example below)
+\-- examples/static-site-generator/      <- self-contained reference example
 
 <your-project>/                          <- e.g. ~/StudioProjects/Breadcrumbs
 +-- sage-config.yaml                     <- created by setup wizard
@@ -183,7 +183,7 @@ instructions:
   - "If a test references the emulator, see docs/start_emulator.md first."
 ```
 
-See `examples/chatbot/.sage/` for filled-in reference configs.
+See `examples/static-site-generator/.sage/` for filled-in reference configs.
 
 ---
 
@@ -194,7 +194,7 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 | `agents/_BASE.md` | Shared protocol + the `{PROJECT_INSTRUCTIONS}` hook |
 | `agents/<role>.md` | Generic job description per agent |
 | `HANDBOOK.md` | Full protocol details (completion reporting model, escalation, Monitor) |
-| `sage-config.yaml` | This project's team/paths config (chatbot example) |
+| `sage-config.yaml` | This repo's demo team/paths config (points at the static-site-generator example) |
 | `sage-config.SCHEMA.md` | Field reference for `sage-config.yaml` |
 | `_tools/load_agents.py` | Assembles agent prompts; finds `.sage/`; substitutes vars |
 | `_tools/setup_project.py` | Setup wizard for new projects |
@@ -202,7 +202,7 @@ See `examples/chatbot/.sage/` for filled-in reference configs.
 | `templates/MESSAGE_TEMPLATE.md` | Standard SendMessage format |
 | `templates/PROGRESS_TEMPLATE.md` | Progress file template |
 | `guides/ORCHESTRATOR_PATTERNS.md` | Reusable Skill/Team Lead patterns |
-| `examples/chatbot/.sage/` | Reference `.sage/` configs for the chatbot project |
+| `examples/static-site-generator/` | Self-contained reference example (`.sage/` + docs + `sage-config.yaml`) |
 | `.claude/skills/sage-feature-team/SKILL.md` | Full team workflow (PO -> TestCreator -> Developer <-> Tester) |
 | `.claude/skills/sage-dev-test/SKILL.md` | Dev/test cycles only (Developer + Tester team) |
 | `.claude/skills/sage-po/SKILL.md` | Single-agent inline: ProductOwner -- create spec + stories |

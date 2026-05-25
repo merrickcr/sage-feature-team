@@ -1,0 +1,35 @@
+id: STORY-5
+title: Drafts — exclude by default, --include-drafts with [DRAFT] marker
+status: DONE
+epic: EPIC-2
+dependencies: [STORY-4]
+description: |
+  Recognizes the `draft` front-matter field and the build behavior around it.
+  Drafts are excluded entirely by default; --include-drafts includes them with a
+  visible [DRAFT] prefix on index, tag pages, post <title>, and post H1. Depends on
+  STORY-4 so draft exclusion is exercised against the tag listings/counts it owns.
+acceptance_criteria:
+  - id: AC27
+    text: "Given a post with 'draft: true', when 'python -m ssg build' runs without
+      --include-drafts, then no HTML page is generated for it, it has no entry on
+      dist/index.html, and it contributes no entry or count to any tag page."
+  - id: AC28
+    text: "Given a post with 'draft: true' and tags, when 'python -m ssg build --include-drafts'
+      runs, then the post's page is generated and it appears on the index and on its
+      tag pages, and its title is prefixed with '[DRAFT]' on the index, on tag pages,
+      and in the post page's <title> and H1."
+  - id: AC29
+    text: "Given a post with 'draft: \"true\"', 'draft: \"yes\"', or 'draft: \"1\"\
+      ' (truthy strings), when built, then the post is treated as a draft (excluded
+      by default)."
+  - id: AC30
+    text: "Given a post with 'draft: \"false\"' (string) or no draft field, when built,
+      then the post is treated as not a draft (published)."
+  - id: AC31
+    text: "Given a post with 'draft: \"maybe\"' (an unrecognized non-boolean string),
+      when built, then the process exits nonzero and the error names the offending
+      file."
+  - id: AC32
+    text: "Given every post in content/ is a draft and --include-drafts is not set,
+      when built, then the build succeeds and dist/index.html contains 'No posts yet.'
+      (same as an empty content directory)."

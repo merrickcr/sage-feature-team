@@ -1,0 +1,19 @@
+id: EPIC-1
+title: Build pipeline — Markdown to dist/ HTML with index
+description: |
+  The foundational feature area. Parses flat content/*.md files (optional YAML
+  front-matter, recognized fields title + date), converts Markdown bodies to HTML,
+  wraps each page in a built-in template, and emits dist/<basename>.html plus a
+  date-sorted dist/index.html. Owns the build CLI, the dist/ wipe-and-recreate
+  behavior, the "built N pages in <ms>ms" summary, all build-pipeline edge cases,
+  and idempotency. After this epic verifies, the site is fully usable as a
+  page-per-post site without tags or serve.
+status: VERIFIED
+depends_on: []
+story_ids: [STORY-1, STORY-2, STORY-3]
+acceptance: |
+  End-to-end: `python -m ssg build` against tests/fixtures/sample_site/ produces a
+  dist/ that matches tests/fixtures/expected_dist/ byte-for-byte, and running it a
+  second time on unchanged content produces byte-identical output (idempotency).
+  The shared slugify function (introduced here for post basenames) is the single
+  function reused by EPIC-2 for tag slugs.

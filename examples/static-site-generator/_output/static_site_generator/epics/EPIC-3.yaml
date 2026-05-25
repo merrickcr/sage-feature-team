@@ -1,0 +1,17 @@
+id: EPIC-3
+title: Local preview — serve dist/ over HTTP
+description: |
+  Adds the `python -m ssg serve` subcommand. Verifies dist/ exists and is
+  non-empty, serves it over http.server bound to 127.0.0.1:8000 by default, logs
+  each request compactly, and shuts down cleanly on Ctrl-C after finishing any
+  in-flight request. Supports --port (including --port 0 to pick a free port).
+  Does NOT touch the build itself. Owns all local-preview edge cases.
+status: VERIFIED
+depends_on: [EPIC-1]
+story_ids: [STORY-6, STORY-7, STORY-8]
+acceptance: |
+  `python -m ssg serve` serves dist/ on 127.0.0.1:8000; --port overrides; --port 0
+  picks and prints a free port; a missing or empty dist/ exits nonzero with the
+  exact message; a busy port fails with a clear message naming the port. Serve adds
+  no modifications to EPIC-1 or EPIC-2 code paths (verified by those epics' tests
+  still passing unchanged).

@@ -1,0 +1,29 @@
+id: STORY-6
+title: Serve — serve dist/ over HTTP with request logging and clean shutdown
+status: DONE
+epic: EPIC-3
+dependencies: []
+description: |
+  The `python -m ssg serve` happy path (serve.py + CLI wiring). Serves ./dist/ over
+  http.server bound to 127.0.0.1 (default port 8000), logs each request compactly to
+  stdout, and shuts down cleanly on Ctrl-C — finishing any in-flight request, then
+  printing 'stopping'. Tests bind to port 0 and read back the chosen port; assert on
+  response status/body, not on log format. Cross-epic ordering is enforced at the
+  epic level (EPIC-3 after EPIC-1 VERIFIED), so this story's intra-epic deps are empty.
+acceptance_criteria:
+  - id: AC33
+    text: "Given a non-empty ./dist/ containing 'hello.html', when the serve handler
+      is running and an HTTP GET /hello.html is made, then the response status is
+      200 and the body equals the bytes of dist/hello.html."
+  - id: AC34
+    text: "Given a running serve handler, when a request is made for a path that does
+      not exist in dist/, then the response status is 404."
+  - id: AC35
+    text: "Given the server is bound (test uses port 0), when started with the default
+      configuration, then it binds to host 127.0.0.1 (not 0.0.0.0) and the default
+      port when unspecified is 8000."
+  - id: AC36
+    text: "Given the server is running and an interrupt (Ctrl-C / KeyboardInterrupt)
+      is delivered, when shutdown occurs, then the process prints 'stopping', exits
+      with status zero, and any in-flight request completes rather than being dropped
+      mid-response."

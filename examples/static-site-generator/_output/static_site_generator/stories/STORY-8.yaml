@@ -1,0 +1,22 @@
+id: STORY-8
+title: Serve preconditions — missing/empty dist and busy-port errors
+status: DONE
+epic: EPIC-3
+dependencies: [STORY-6]
+description: |
+  The serve command's failure modes: refusing to serve when dist/ is missing or
+  empty, and reporting a clear error when the requested port is already in use.
+  Library code raises; __main__.py renders to stderr and sets the nonzero exit code.
+acceptance_criteria:
+  - id: AC39
+    text: "Given no ./dist/ directory exists, when 'python -m ssg serve' runs, then
+      the process exits nonzero and stderr contains exactly the message \"dist/ is
+      empty — run 'python -m ssg build' first\"."
+  - id: AC40
+    text: "Given ./dist/ exists but contains no files, when 'python -m ssg serve'
+      runs, then the process exits nonzero with the same \"dist/ is empty — run 'python
+      -m ssg build' first\" message."
+  - id: AC41
+    text: "Given the requested port is already bound by another socket, when 'python
+      -m ssg serve --port <N>' runs, then the process exits nonzero and stderr contains
+      a clear message naming port <N> and suggesting the --port flag."

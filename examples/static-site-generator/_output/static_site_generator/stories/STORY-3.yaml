@@ -1,0 +1,46 @@
+id: STORY-3
+title: Build command — walk content/, write dist/, generate index, print summary
+status: DONE
+epic: EPIC-1
+dependencies: [STORY-1, STORY-2]
+description: |
+  The builder (builder.py) wired to the CLI (__main__.py). Walks ./content/ flatly,
+  parses and renders each *.md to ./dist/<basename>.html, generates the date-sorted
+  ./dist/index.html, wipes-and-recreates dist/, and prints the success summary. Owns
+  the build CLI surface, directory-level edge cases, and the end-to-end + idempotency
+  tests against tests/fixtures/. Library code raises; only __main__.py prints and
+  decides exit codes.
+acceptance_criteria:
+  - id: AC12
+    text: "Given a ./content/ directory with N markdown files, when 'python -m ssg
+      build' runs, then ./dist/ contains one <basename>.html per source file (content/hello-world.md
+      -> dist/hello-world.html) plus dist/index.html, and stdout contains exactly
+      one line matching the pattern 'built N pages in <ms>ms'."
+  - id: AC13
+    text: "Given multiple posts with mixed dates and some without dates, when built,
+      then dist/index.html lists posts sorted by date descending, with date-less posts
+      last ordered alphabetically by title, and each entry shows the title linked
+      to its page plus the date when present."
+  - id: AC14
+    text: "Given no ./content/ directory exists, when 'python -m ssg build' runs,
+      then the process exits nonzero and stderr contains a clear message telling the
+      user to create a content/ directory."
+  - id: AC15
+    text: "Given an empty ./content/ directory, when built, then the process exits
+      zero and dist/index.html is produced containing the text 'No posts yet.'"
+  - id: AC16
+    text: "Given a ./content/ file with malformed (invalid YAML) front-matter, when
+      'python -m ssg build' runs, then the process exits nonzero and stderr names
+      the offending file (abort on first failing file; no partial dist/ guarantees)."
+  - id: AC17
+    text: "Given a pre-existing ./dist/ directory containing a stale file not derived
+      from current content, when build runs, then dist/ is wiped and recreated so
+      the stale file is absent afterward."
+  - id: AC18
+    text: "Given an unchanged ./content/ directory, when 'python -m ssg build' is
+      run twice in succession, then the full dist/ output (every file's bytes) is
+      identical across the two runs (idempotency)."
+  - id: AC19
+    text: "Given the fixture tree tests/fixtures/sample_site/, when 'python -m ssg
+      build' runs against it, then the produced dist/ matches tests/fixtures/expected_dist/
+      file-for-file and byte-for-byte (end-to-end snapshot)."

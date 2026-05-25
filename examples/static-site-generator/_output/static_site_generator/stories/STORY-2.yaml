@@ -1,0 +1,28 @@
+id: STORY-2
+title: Render a parsed post into a full HTML page
+status: DONE
+epic: EPIC-1
+dependencies: [STORY-1]
+description: |
+  The renderer layer (renderer.py). Wraps a parsed post (title, optional date,
+  HTML body) in the built-in HTML template, producing a complete standalone HTML
+  document. A tiny inline <style> block is fine. This story owns only the
+  per-page template; the index page is owned by STORY-3.
+acceptance_criteria:
+  - id: AC8
+    text: "Given a parsed post with title 'Hello, world', date '2026-05-24', and an
+      HTML body, when rendered to a page, then the output is a complete HTML document
+      containing the title inside both the <title> element and an <h1>, the date '2026-05-24',
+      and the post's HTML body."
+  - id: AC9
+    text: "Given a parsed post with a title but no date, when rendered, then the output
+      contains the title in <title> and <h1> and contains no date markup (and does
+      not error)."
+  - id: AC10
+    text: "Given a parsed post whose HTML body is empty, when rendered, then the output
+      is still a complete HTML document with the title/H1 present and an empty body
+      region, raising no error."
+  - id: AC11
+    text: "Given the same parsed post rendered twice, when the two outputs are compared,
+      then they are byte-identical (the renderer is deterministic — no timestamps
+      or run-dependent content in the template)."

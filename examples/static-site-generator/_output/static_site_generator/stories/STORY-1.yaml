@@ -1,0 +1,40 @@
+id: STORY-1
+title: Parse front-matter and convert Markdown body to HTML
+status: DONE
+epic: EPIC-1
+dependencies: []
+description: |
+  The parser layer (parser.py). Splits a Markdown file into optional ---delimited
+  YAML front-matter and a body, extracts the recognized title/date fields, and
+  converts the body to HTML via markdown-it-py. Also establishes the shared
+  slugify function (reused for tag slugs in EPIC-2) and the filename-derived title
+  fallback. Pure functions, no disk-walking or printing here.
+acceptance_criteria:
+  - id: AC1
+    text: "Given a file whose content is '---\\ntitle: Hello, world\\ndate: 2026-05-24\\
+      n---\\n\\nbody text', when it is parsed, then the result exposes title 'Hello,
+      world', date '2026-05-24', and HTML body containing the rendered 'body text'."
+  - id: AC2
+    text: "Given a file with no front-matter delimiter (body only, e.g. 'hello-world.md'
+      containing just '# Hi'), when parsed, then title is the filename with dashes
+      converted to spaces and title-cased ('Hello World') and date is absent/None."
+  - id: AC3
+    text: "Given front-matter containing an unexpected field (e.g. 'author: Jane')
+      alongside title, when parsed, then the unexpected field is ignored and parsing
+      succeeds with the title present."
+  - id: AC4
+    text: "Given front-matter present but an empty body (nothing after the closing
+      ---), when parsed, then parsing succeeds with the title/date populated and an
+      empty (or whitespace-only) HTML body, raising no error."
+  - id: AC5
+    text: "Given a file with malformed front-matter that is not valid YAML, when parsed,
+      then a specific exception (not bare Exception) is raised whose message names
+      the offending file."
+  - id: AC6
+    text: "Given a Markdown body containing raw inline HTML (e.g. '<div>x</div>'),
+      when parsed, then the raw HTML is passed through into the output unsanitized."
+  - id: AC7
+    text: "Given the shared slugify function, when called with 'Hello, World!' then
+      it returns 'hello-world-' (lowercased, each run of non-alphanumeric characters
+      mapped per the documented rule), and calling it with the same input always returns
+      the same value (deterministic)."

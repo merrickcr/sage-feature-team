@@ -1,0 +1,40 @@
+id: STORY-4
+title: Tags — per-tag pages, index Tags section, per-post tag display
+status: DONE
+epic: EPIC-2
+dependencies: []
+description: |
+  Recognizes the `tags` front-matter field (a list) and the build-time behavior
+  around it: a dist/tags/<slug>.html page per unique tag, a Tags section on the
+  index, and tag links on each post page. Tag slugs use EPIC-1's shared slugify
+  function. Cross-epic ordering (EPIC-2 after EPIC-1 VERIFIED) is enforced at the
+  epic level, so this story's intra-epic dependencies list is empty.
+acceptance_criteria:
+  - id: AC20
+    text: "Given posts carrying tags, when built, then for each unique tag a dist/tags/<slug>.html
+      page exists listing every post with that tag sorted by date descending (date-less
+      last, alphabetical by title), where <slug> is the tag lowercased with non-alphanumeric
+      characters replaced per the shared slugify rule."
+  - id: AC21
+    text: "Given posts carrying tags, when built, then dist/index.html contains a
+      Tags section listing each tag with its post count and linking to that tag's
+      dist/tags/<slug>.html page."
+  - id: AC22
+    text: "Given a post with tags [python, learning], when built, then that post's
+      own HTML page displays both tags, each linked to its corresponding dist/tags/<slug>.html
+      page."
+  - id: AC23
+    text: "Given a post with no tags field or an empty 'tags: []', when built, then
+      it appears on no tag page and contributes no entry to the index Tags section."
+  - id: AC24
+    text: "Given every post has 'tags: []' (or no tags), when built, then no dist/tags/
+      directory is created and dist/index.html omits the Tags section entirely (no
+      empty Tags heading)."
+  - id: AC25
+    text: "Given a post with 'tags: foo' (a string instead of a list), when built,
+      then the process exits nonzero and the error names the offending file and states
+      tags must be a list (e.g. 'tags must be a list, got string')."
+  - id: AC26
+    text: "Given two posts with tags 'c++' and 'c--' (or any tags that slugify to
+      the same value such as 'node.js' and 'node-js'), when built, then they share
+      a single dist/tags/<slug>.html page that lists both posts."

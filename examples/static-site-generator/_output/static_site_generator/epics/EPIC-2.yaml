@@ -1,0 +1,19 @@
+id: EPIC-2
+title: Content organization — tags and drafts
+description: |
+  Adds two recognized front-matter fields on top of EPIC-1's parser: `tags` (list)
+  and `draft` (bool/truthy-string). Generates per-tag listing pages under
+  dist/tags/, adds a Tags section to the index, displays tags on each post page,
+  and excludes drafts by default with a --include-drafts opt-in that marks them
+  [DRAFT]. Owns all content-organization edge cases (string-vs-list tags, special
+  characters in tags, truthy-string drafts, all-drafts-without-flag, empty tags).
+status: VERIFIED
+depends_on: [EPIC-1]
+story_ids: [STORY-4, STORY-5]
+acceptance: |
+  Posts with tags produce dist/tags/<slug>.html pages; the index shows a Tags
+  section linking to them; each post page lists its tags. draft:true posts are
+  excluded by default and included with --include-drafts carrying a visible [DRAFT]
+  marker. Tag slugs use EPIC-1's shared slugify function (cross-story behavior:
+  post basenames and tag slugs agree on slugification). Adding this epic does not
+  break any EPIC-1 build test.

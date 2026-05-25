@@ -1,0 +1,17 @@
+id: STORY-7
+title: Serve --port flag including --port 0 (pick-any-free)
+status: DONE
+epic: EPIC-3
+dependencies: [STORY-6]
+description: |
+  Adds the --port <N> flag to the serve subcommand, overriding the default 8000.
+  --port 0 binds to an OS-chosen free port and prints the chosen port. Builds on
+  STORY-6's serve handler.
+acceptance_criteria:
+  - id: AC37
+    text: "Given 'python -m ssg serve --port 9001', when the server binds, then it
+      binds to port 9001 (not 8000)."
+  - id: AC38
+    text: "Given 'python -m ssg serve --port 0', when the server binds, then it binds
+      to an OS-chosen free (nonzero) port and that chosen port number is printed to
+      stdout."

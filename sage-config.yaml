@@ -1,17 +1,23 @@
-# Sage Feature Team config for chatbot
+# Sage Feature Team config for the bundled static-site-generator example.
 #
-# Project-specific HOW lives in the chatbot's own .sage/ directory:
-#   C:\Users\merri\claudeProjects\chatbot\.sage\
-# Each agent's instructions list points at chatbot docs.
+# This is the demo "driver" config used when you run /sage-feature-team from
+# the sage-feature-team repo root (e.g. the README Quickstart). It points at
+# the self-contained example bundled in this repo:
+#   examples/static-site-generator/
+# The example's per-agent HOW instructions live in its own .sage/ directory,
+# which we reference via paths.sage_dir below.
 
 project:
-  name: "chatbot"
+  name: "static-site-generator"
   root_dir: "."
-  absolute_root_dir: "C:\\Users\\merri\\claudeProjects\\chatbot"
+  # absolute_root_dir is intentionally omitted in this demo driver config.
+  # In a real installed project, setup_project.py writes an absolute path here
+  # so the loader can resolve .sage/ regardless of cwd. For this bundled
+  # example, root_dir + sage_dir (below) are enough.
 
 team:
-  name: "chatbot-feature-team"
-  dev_test_team_name: "chatbot-dev-test-team"
+  name: "static-site-generator-feature-team"
+  dev_test_team_name: "static-site-generator-dev-test-team"
   agents:
     full:
       - name: "ProductOwner"
@@ -32,12 +38,12 @@ team:
 
 paths:
   output_dir: "_output"
-  # In a real project, sage_dir would default to <absolute_root_dir>/.sage.
-  # Here we point at the example bundled with sage-feature-team so the loader
-  # can be exercised without writing into the chatbot project.
-  sage_dir: "examples/chatbot/.sage"
+  # Point at the bundled example's .sage/ so the loader reads its real
+  # per-agent instruction configs. Run from the repo root, the agent role
+  # files still resolve against this repo's top-level agents/ directory.
+  sage_dir: "examples/static-site-generator/.sage"
 
 limits:
-  max_cycles: 5                # per-story dev↔test cycle cap
+  max_cycles: 5                # per-story dev<->test cycle cap
   max_parallel_workers: 4      # concurrent ephemeral worker cap (parallel scheduler)
   global_timeout_seconds: 3600 # wall-clock kill switch for full-mode feature runs

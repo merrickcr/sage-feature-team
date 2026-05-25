@@ -85,6 +85,12 @@ AGENT_SLUGS = {
     "EpicVerifier": "epic-verifier",
 }
 
+# Subdirectory of the resolved sage_dir where load_agents writes the fully
+# rendered prompts (one <AgentName>.md per agent + agents.json). The location
+# is owned here so it's identical for every caller -- never chosen ad hoc by a
+# skill or the orchestrator.
+RENDERED_DIRNAME = ".rendered"
+
 
 def find_sage_dir(config):
     """Locate the project's .sage/ directory.
@@ -205,6 +211,40 @@ def build_agent_prompt(agent_name, agent_file, base_content, role_content, confi
 
 
 # ---------------------------------------------------------------------------
+# Rendered-prompt cache
+# ---------------------------------------------------------------------------
+
+def write_rendered_prompts(sage_dir, result):
+    """Persist the rendered prompts to <sage_dir>/.rendered/.
+
+    Writes one <AgentName>.md per agent plus agents.json (the full loader
+    result). The path is computed here -- not passed in by the caller -- so
+    every skill/run writes to exactly the same place. Sets
+    result['rendered_dir'] and returns it, or returns None if sage_dir is
+    unknown or the write fails. Never raises: caching must not break a load.
+    """
+    if sage_dir is None:
+        return None
+    rendered_dir = Path(sage_dir) / RENDERED_DIRNAME
+    try:
+        rendered_dir.mkdir(parents=True, exist_ok=True)
+        for agent_name, prompt in result["agents"].items():
+            (rendered_dir / f"{agent_name}.md").write_text(
+                prompt, encoding="utf-8", newline="\n"
+            )
+        # Set the path before serializing so agents.json records it too.
+        result["rendered_dir"] = str(rendered_dir)
+        (rendered_dir / "agents.json").write_text(
+            json.dumps(result, indent=2), encoding="utf-8", newline="\n"
+        )
+        return str(rendered_dir)
+    except OSError as e:
+        print(f"[WARN] could not write rendered prompts to {rendered_dir}: {e}",
+              file=sys.stderr)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
 
@@ -278,18 +318,24 @@ def load_agents_for_mode(mode):
         team = config["team"]
         team_name = team.get("dev_test_team_name") if mode == "dev-test-only" else team.get("name")
 
-        return {
+        result = {
             "success": True,
             "mode": mode,
             "team_name": team_name,
             "agents": agents_dict,
             "agent_names": [s["name"] for s in agent_specs],
             "sage_dir": str(sage_dir) if sage_dir else None,
+            "rendered_dir": None,
             "config_summary": {
                 "project_name": config.get("project", {}).get("name"),
                 "absolute_root_dir": config.get("project", {}).get("absolute_root_dir"),
             },
         }
+
+        # Persist rendered prompts to a fixed, loader-owned location so every
+        # run writes the same place (not left to the calling skill/orchestrator).
+        result["rendered_dir"] = write_rendered_prompts(sage_dir, result)
+        return result
 
     except Exception as e:
         return {"success": False, "error": str(e), "error_type": type(e).__name__}
