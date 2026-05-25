@@ -18,7 +18,7 @@ skill acting as Team Lead. Project-specific knowledge lives in each project's
 
 ## Quickstart (5 minutes)
 
-From a fresh clone to a live agent team drafting a spec for you.
+From a fresh clone to a feature spec drafted by your first sage agent.
 
 **1. Install** (one-time per machine):
 
@@ -27,88 +27,64 @@ pip install -r requirements.txt
 python _tools/install_skill.py
 ```
 
-**2. Kick off a feature.** This repo ships with a ready-to-run example config
-(`sage-config.yaml`, pointed at the bundled `examples/static-site-generator/`).
-From the repo root, in Claude Code:
+**2. Invoke the ProductOwner inline.** This repo ships with a bundled example
+project (`examples/static-site-generator/` -- a small Markdown-to-HTML site
+builder) that the demo config points at. From the repo root, in Claude Code:
 
 ```
-/sage-feature-team "Add a /help command that lists available commands"
+/sage-po "Add an RSS feed at /feed.xml listing the 20 most recent posts sorted by date"
 ```
 
-A team spins up and the **ProductOwner** starts drafting the spec. Watch the
-team panel populate -- and once you approve the spec, the parallel
-**TestCreator / Developer / Tester** workers join it, one per story:
-
-![Sage team panel: ProductOwner plus parallel per-story workers](docs/img/quickstart-team-panel.png)
-
-**3. Approve the spec.** When the ProductOwner reports the spec is ready, reply
-`APPROVED`. A spec, at least one epic, and one YAML file per story land under
-`_output/`:
+`/sage-po` runs the ProductOwner agent inline in the main conversation -- no
+team panel, no async coordination. After a few minutes you'll see new files
+under `_output/`:
 
 ```
-_output/add_help_command/
+_output/add_rss_feed/
 +-- spec.md
 +-- epics/EPIC-1.yaml
 +-- stories/STORY-1.yaml, STORY-2.yaml, ...
 ```
 
-![_output tree: spec.md, epics/EPIC-1.yaml, stories/STORY-1.yaml ...](docs/img/quickstart-output-files.png)
+The spec, one epic, and one YAML per story. Open `spec.md` for the
+human-readable version and the `STORY-N.yaml` files for the per-story
+acceptance criteria that downstream agents work against. That's the
+on-ramp -- the rest of sage is what happens when you hand these stories
+off to the team.
 
-That's the on-ramp. From here the team cycles each story through
-tests -> code -> validation in parallel until every epic verifies.
-
----
-
-## Use sage with your own project
-
-The Quickstart above runs against the bundled `examples/static-site-generator/`.
-To point these same agents at *your own* codebase, `cd` to that project's
-repo root in Claude Code and run:
-
-```
-/sage-install
-```
-
-`/sage-install` scaffolds `.sage/` (the per-agent config files, the agent
-role files, the helper scripts, the handbook, the templates) and
-`.claude/skills/` (the six sage skills, with paths rewritten to point at the
-project's `.sage/`) into your project. After it completes, edit each
-`.sage/sage-<role>-config.yaml` to give the agents your project's HOW
-(testing conventions, file layout, code-style docs to consult), then run
-`/sage-feature-team "feature description"` from your project root.
-
-For prereqs, manual install path, diagnostic notes, and the full
-what-gets-installed-where tree, see **[docs/INSTALL.md](docs/INSTALL.md)**.
-
-> Just want the spec without spawning a team? Try `/sage-po "..."` -- the
-> ProductOwner inline, no team panel. The single-agent skills section below
-> covers this.
+> **Want to see what a *finished* run looks like instead of running one?**
+> The bundled example already has a complete run committed: browse
+> [`examples/static-site-generator/_output/static_site_generator/`](examples/static-site-generator/_output/static_site_generator/)
+> for the spec, all 8 story YAMLs + their `STORY-N.implementation.md`
+> sidecars (Developer's AC map), the three `verification/EPIC-N.md` reports
+> (EpicVerifier output), and `tokens.md` (per-worker token telemetry). No
+> install required.
 
 ---
 
-## Try a single agent first
+## Going further
 
-Before spinning up the full team, run one agent inline. The single-agent
-skills act as the agent directly in the main conversation -- no team panel,
-no orchestrator overhead, no async coordination. It's the fastest way to
-get a feel for what each role does.
+Once you've seen the PO output, three natural next steps:
 
-From the repo root, in Claude Code:
-
-```
-/sage-po "Add a /help command that lists available commands"
-```
-
-The ProductOwner drafts a spec and per-story YAMLs inline; the output lands
-under `_output/<feature_name>/`. From there you can read what it produced,
-pick the work back up later with `/sage-test-creator`, `/sage-developer`, or
-`/sage-tester`, or hand it to the full team with `/sage-feature-team` once
-you've approved the spec.
-
-The same pattern works for any role -- `/sage-developer` will pick up the
-next `IN_DEV` story; `/sage-tester` will run the next `TESTING` one. See
-[Inline single-agent skills](#inline-single-agent-skills) below for the full
-per-skill reference.
+- **Continue with inline single-agent skills.** Pick up the work yourself
+  one role at a time: `/sage-test-creator` writes tests for the next ready
+  story, `/sage-developer` implements code for the next `IN_DEV` story,
+  `/sage-tester` verifies the next `TESTING` story (story-scoped tests,
+  plus the AC implementation map gate). The
+  [reference table below](#inline-single-agent-skills) lists each one with
+  its picks-up rule.
+- **Run the full team.** `/sage-feature-team "<feature description>"`
+  spawns ProductOwner + TestCreator + Developer + Tester + EpicVerifier and
+  routes work through a parallel scheduler until every epic verifies. You'll
+  see a team panel populate with one worker per story. Heavier than the
+  inline path; see [How it flows](#how-it-flows) below for the full
+  pipeline.
+- **Use sage with your own project.** From your project's repo root, run
+  `/sage-install`. The installer scaffolds `.sage/` and `.claude/skills/`
+  into your project, with paths rewritten so the skills point at your
+  project's bundled copies. Then edit each `.sage/sage-<role>-config.yaml`
+  with your project's testing conventions, file layout, and code-style
+  docs. Full walkthrough: **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 ---
 
@@ -161,9 +137,9 @@ here's the same diagram as a static image:
 
 ## Inline single-agent skills
 
-Reference for the inline skills introduced in
-[Try a single agent first](#try-a-single-agent-first). Each runs the agent
-directly in the main conversation -- no team panel, no orchestrator overhead.
+Reference for the inline skills mentioned in
+[Going further](#going-further). Each runs the agent directly in the main
+conversation -- no team panel, no orchestrator overhead.
 
 | Skill | Picks up | Override |
 |---|---|---|

@@ -4,7 +4,11 @@
 project:
   name: "static-site-generator"
   root_dir: "."
-  absolute_root_dir: 'C:\Users\merri\claudeProjects\sage-feature-team\examples\static-site-generator'
+  # absolute_root_dir is intentionally omitted in the bundled example.
+  # If you copy this example into your own working directory and want to run
+  # it from elsewhere, set absolute_root_dir to that path. For the bundled
+  # case (running from the sage-feature-team repo root), root_dir + the
+  # sage_dir default are enough.
 
 team:
   name: "static-site-generator-feature-team"

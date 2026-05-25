@@ -202,7 +202,7 @@ Recommended action: <what the user should do>
 - `HANDBOOK.md` -- Full protocol (completion reporting model, escalation, Monitor)
 - `guides/ORCHESTRATOR_PATTERNS.md` -- Reusable patterns shared with `sage-feature-team`
 - `agents/developer.md`, `agents/tester.md` -- Agent role files
-- `examples/chatbot/.sage/sage-tester-config.yaml` -- Reference Tester config
+- `examples/static-site-generator/.sage/sage-tester-config.yaml` -- Reference Tester config
 
 
 ---

@@ -94,11 +94,11 @@ def project_root_to_slug(abs_root):
 
     Every path separator (`:`, `\\`, `/`) becomes `-`. This naturally produces
     `--` for the Windows drive-letter colon (`C:` -> `C-`, then `\\` -> `-`,
-    so `C:\\Users` -> `C--Users`). POSIX leading slash `/Users/merri` becomes
-    `-Users-merri`.
+    so `C:\\Users` -> `C--Users`). POSIX leading slash `/Users/yourname` becomes
+    `-Users-yourname`.
 
-    Example: C:\\Users\\merri\\StudioProjects\\Breadcrumbs
-        ->   C--Users-merri-StudioProjects-Breadcrumbs
+    Example: C:\\Users\\yourname\\StudioProjects\\Breadcrumbs
+        ->   C--Users-yourname-StudioProjects-Breadcrumbs
     """
     s = str(abs_root)
     s = s.replace(":", "-")

@@ -43,9 +43,9 @@ limits:
 
 ```yaml
 project:
-  name: "chatbot"                                           # str
+  name: "static-site-generator"                                           # str
   root_dir: "."                                             # str (relative)
-  absolute_root_dir: "C:\\Users\\merri\\claudeProjects\\chatbot"  # str (absolute)
+  absolute_root_dir: "/abs/path/to/static-site-generator"  # str (absolute)
 ```
 
 | Field | Required | Purpose |
@@ -60,8 +60,8 @@ project:
 
 ```yaml
 team:
-  name: "chatbot-feature-team"
-  dev_test_team_name: "chatbot-dev-test-team"
+  name: "static-site-generator-feature-team"
+  dev_test_team_name: "static-site-generator-dev-test-team"
   agents:
     full: [...]
     dev_test_only: [...]
@@ -89,6 +89,7 @@ Recognized agent names (mapped to `.sage/` config files by `_tools/load_agents.p
 | `TestCreator`  | `sage-test-creator-config.yaml`  |
 | `Developer`    | `sage-developer-config.yaml`     |
 | `Tester`       | `sage-tester-config.yaml`        |
+| `EpicVerifier` | `sage-epic-verifier-config.yaml` |
 
 ---
 
@@ -169,7 +170,7 @@ prepended to every role file. Adding the hook to a new agent is automatic.
 
 ---
 
-## Example: chatbot's Config
+## Example: static-site-generator's config
 
-See `sage-config.yaml` in this directory and `examples/chatbot/.sage/` for a
+See `sage-config.yaml` in this directory and `examples/static-site-generator/.sage/` for a
 complete working example.

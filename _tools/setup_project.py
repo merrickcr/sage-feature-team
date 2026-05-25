@@ -151,8 +151,8 @@ SKILL_PATH_REWRITES = [
     ("`_tools/list_eligible.py`",                             "`.sage/_tools/list_eligible.py`"),
     ("`_tools/rollup_status.py`",                             "`.sage/_tools/rollup_status.py`"),
     ("`_tools/prepare_task_payload.py`",                      "`.sage/_tools/prepare_task_payload.py`"),
-    ("`examples/chatbot/.sage/sage-tester-config.yaml`",      "`.sage/sage-tester-config.yaml`"),
-    ("`examples/chatbot/.sage/`",                             "`.sage/`"),
+    ("`examples/static-site-generator/.sage/sage-tester-config.yaml`",   "`.sage/sage-tester-config.yaml`"),
+    ("`examples/static-site-generator/.sage/`",                          "`.sage/`"),
 ]
 
 AGENT_SLUGS = ["product-owner", "test-creator", "developer", "tester", "epic-verifier"]

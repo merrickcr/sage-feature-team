@@ -102,6 +102,66 @@ README split + upgrades (write-up prep):
   links to INSTALL.md. INSTALL.md retitled to Phase 1 / Phase 2 so the
   per-machine vs per-project distinction is visible at a glance.
 
+Write-up support material:
+- Add docs/LESSONS.md (~2500 words). Seven lessons each with concrete
+  failure + what-we-did + what-to-take-from-it: YAML as event log /
+  killing the SYN-ACK handshake / shutdown_request is the only real
+  shutdown / cycle budgets reset on resume (deliberate, not a bug) /
+  mechanical eligibility beats LLM scheduling / per-story ephemeral
+  workers / token tracking is structurally hard in agentic frameworks.
+  Plus an honest 'Open question' section on the SKILL.md-as-state
+  -machine tradeoff (v1 picks acknowledge-and-ship; v2 may extract).
+- Refresh _tools/README.md: top-of-file user-facing vs internal split
+  (caps the public surface explicitly); fixed staleness (EpicVerifier
+  in the agent slug table, all 6 SKILL files in the copies table, full
+  scaffolded-configs list, current layout with all 14 scripts labelled).
+  Added extract_token_usage.py + record_worker_usage.py (previously
+  missed in the refresh; both are real and called by every inline skill).
+
+Audit fixes (ship-readiness pass):
+- Strip 3,693 null bytes from README.md (Write-tool padding bug).
+- Replace broken image refs in README (quickstart-team-panel.png /
+  quickstart-output-files.png) with HTML-comment placeholders until
+  screenshots exist.
+- Fix examples/static-site-generator/sage-config.yaml: remove the
+  hardcoded C:\Users\merri\... absolute_root_dir; same treatment as the
+  root sage-config.yaml.
+- Purge stale 'chatbot' references repo-wide (now uses
+  static-site-generator everywhere): CLAUDE.md, sage-config.SCHEMA.md +
+  its bundled mirror, .claude/skills/sage-dev-test/SKILL.md,
+  .claude/skills/sage-feature-team/SKILL.md, and the SKILL_PATH_REWRITES
+  in _tools/setup_project.py (the latter was a real install-time bug:
+  the rewrite rules no longer matched the SKILL content, so installed
+  projects shipped SKILL files with examples/static-site-generator/.sage/
+  paths instead of being rewritten to .sage/).
+- Sanitize /Users/merri usage example in _tools/discover_and_record.py
+  (and its bundled mirror) to /Users/yourname.
+- Add EpicVerifier row to the agent table in sage-config.SCHEMA.md
+  (and its bundled mirror); previously missing.
+
+Quickstart restructure (the heaviest-payoff README change in this pass):
+- Replace the team-mode '/sage-feature-team' Quickstart with the lighter
+  '/sage-po' inline invocation. The previous Quickstart had three issues:
+  (a) its example feature ('add a /help command that lists available
+  commands') is a fossil from when the bundled example was the chatbot --
+  the static-site-generator has no commands; (b) the bundled example is
+  already complete (8 stories DONE, 3 epics VERIFIED), so a 'kick off a new
+  feature' demo on top of it is conceptually muddy; (c) it drifted from
+  the originally-intended on-ramp shape (the write-up TODO said 'invoke
+  /sage-po solo against the example', not the heavier team invocation).
+- New Quickstart: /sage-po with a sensible feature for the bundled
+  example ('Add an RSS feed at /feed.xml listing the 20 most recent posts
+  sorted by date'). Same five-minute ceiling. No team panel needed, no
+  screenshots required.
+- Add a callout pointing at the already-committed end-to-end run as a
+  no-install reference for readers who don't want to run anything yet.
+- Collapse the prior 'Use sage with your own project' and 'Try a single
+  agent first' sections into a single 'Going further' bullet list with
+  three next-step paths (more inline skills / team mode / your own project).
+- Drop the broken-screenshot HTML-comment placeholders; the new Quickstart
+  doesn't reference any images.
+- README: 196 lines -> 172 lines.
+
 Loader change (already in the working tree before this pass):
 - Add RENDERED_DIRNAME + write_rendered_prompts() in _tools/load_agents.py
   (and bundled mirror): persist rendered prompts to .sage/.rendered/

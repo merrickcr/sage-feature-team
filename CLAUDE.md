@@ -24,7 +24,7 @@ python _tools/load_agents.py full
 python _tools/load_agents.py dev-test-only
 ```
 
-There is **no build, lint, or test suite** in this repo. The Python tools are dependency-light scripts run directly. To sanity-check changes to `load_agents.py`, run it against the bundled `sage-config.yaml` (which points at `examples/chatbot/.sage/`) and confirm `success: true` with all agent prompts rendered.
+There is **no build, lint, or test suite** in this repo. The Python tools are dependency-light scripts run directly. To sanity-check changes to `load_agents.py`, run it against the bundled `sage-config.yaml` (which points at `examples/static-site-generator/.sage/`) and confirm `success: true` with all agent prompts rendered.
 
 Python 3.10+ is required.
 
@@ -47,7 +47,7 @@ The same rendered prompt for a role is reused for *every* worker of that role. A
 
 This distinction trips up most edits. Two layouts run the same skills:
 
-- **Source repo (this checkout):** tools at `_tools/`, agents at `agents/`. `sage-config.yaml` here is the *chatbot demo* config — it points `sage_dir` at `examples/chatbot/.sage/` so the loader can be exercised without a separate project.
+- **Source repo (this checkout):** tools at `_tools/`, agents at `agents/`. `sage-config.yaml` here is the *static-site-generator demo* config — it points `sage_dir` at `examples/static-site-generator/.sage/` so the loader can be exercised without a separate project.
 - **Installed project:** `setup_project.py` copies `agents/`, `_tools/load_agents.py`, `HANDBOOK.md`, templates, guides, and the SKILL files into `<project>/.sage/` and `<project>/.claude/skills/`. **On copy, SKILL files are path-rewritten** (`_tools/...` → `.sage/_tools/...`, `` `HANDBOOK.md` `` → `` `.sage/HANDBOOK.md` ``). After install the project is self-contained — no dependency on this checkout.
 
 `setup_project.py` always overwrites generic files on re-run (so `git pull` + re-install updates a project) but **never** overwrites the per-agent `.sage/sage-*-config.yaml` instruction files or `sage-config.yaml` (user's work).

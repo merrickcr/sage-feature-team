@@ -618,4 +618,4 @@ That's the whole loop. No handshake state, no message-ID tracking, no dedup tabl
 - `_tools/prepare_task_payload.py` -- Renders the spec + one or more story YAMLs + optional epic YAML as a markdown block suitable for embedding in a worker's task message. Call once per task spawn (Step 6d) and paste stdout into the SendMessage body. This eliminates the bootstrap `Read` tool calls a fresh worker would otherwise make, trimming cache_create on its first few turns.
 - `_tools/extract_token_usage.py` -- Used internally by `record_worker_usage.py` to parse one transcript's usage. Don't call from this skill.
 - `_tools/record_worker_usage.py` -- Used internally by `discover_and_record.py` to record one worker. Also called directly from this skill in Step 7 to record the orchestrator's own main-session diff.
-- `examples/chatbot/.sage/` -- Reference per-agent instruction configs
+- `examples/static-site-generator/.sage/` -- Reference per-agent instruction configs
