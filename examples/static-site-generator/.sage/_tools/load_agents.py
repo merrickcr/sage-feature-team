@@ -260,9 +260,14 @@ def validate_config(config):
             raise ValueError(f"Missing required section: {section}")
 
     project = config.get("project", {})
-    for field in ("name", "absolute_root_dir"):
-        if not project.get(field):
-            raise ValueError(f"project.{field} is required and cannot be empty")
+    if not project.get("name"):
+        raise ValueError("project.name is required and cannot be empty")
+    # absolute_root_dir is OPTIONAL: find_sage_dir() falls back through
+    # paths.sage_dir -> project.root_dir -> ./.sage when it's omitted. Both
+    # bundled configs in this repo (repo-root sage-config.yaml and
+    # examples/static-site-generator/sage-config.yaml) intentionally omit it
+    # so they're portable; setup_project.py writes an absolute path here for
+    # real installed projects.
 
     team = config.get("team", {})
     if not team.get("name"):

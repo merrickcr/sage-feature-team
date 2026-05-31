@@ -21,8 +21,8 @@ What's NOT in the payload (deliberately):
   - Project instructions (already baked into the worker's rendered system
     prompt via PROJECT_INSTRUCTIONS substitution)
   - Test files (vary per cycle; Developer reads only the failing ones)
-  - AC implementation map sidecars (separate concern -- see
-    TODO_COST_OPTIMIZATIONS.md Lever 2 for "smarter re-cycle context")
+  - AC implementation map sidecars (separate concern -- they vary per
+    cycle; workers Read them directly when needed)
 
 CLI:
     python _tools/prepare_task_payload.py --feature add_dark_mode --stories STORY-1
