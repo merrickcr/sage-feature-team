@@ -1,5 +1,8 @@
 # Sage Feature Team
 
+[![Featured in Android Weekly #731](https://img.shields.io/badge/Featured%20in-Android%20Weekly%20%23731-1f6feb)](https://androidweekly.net/issues/issue-731)
+
+
 A multi-agent feature-development workflow for Claude Code. Generic agents
 (ProductOwner, TestCreator, Developer, Tester, EpicVerifier) coordinated by a
 skill acting as Team Lead. Project-specific knowledge lives in each project's
