@@ -76,7 +76,7 @@ Once you've seen the PO output, three natural next steps:
   plus the AC implementation map gate). The
   [reference table below](#inline-single-agent-skills) lists each one with
   its picks-up rule.
-- **Run the full team.** `/sage-feature-team "<feature description>"`
+- **Run the full team.** `/sage-feature-team "<feature description | file-name>"`
   spawns ProductOwner + TestCreator + Developer + Tester + EpicVerifier and
   routes work through a parallel scheduler until every epic verifies. You'll
   see a team panel populate with one worker per story. Heavier than the
